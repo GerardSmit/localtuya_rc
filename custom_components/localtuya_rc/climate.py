@@ -62,6 +62,7 @@ class ToshibaACClimate(ClimateEntity, RestoreEntity):
     """Climate entity that sends Toshiba AC IR commands via a Tuya remote."""
 
     _attr_has_entity_name = False
+    _attr_should_poll = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_min_temp = 17
     _attr_max_temp = 30

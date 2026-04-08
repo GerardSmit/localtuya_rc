@@ -27,6 +27,7 @@ from homeassistant.const import (
     CONF_DEVICE_ID,
 )
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers import device_registry as dr
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.components.remote import (
@@ -96,7 +97,7 @@ async def _create_remote(hass, config):
         _LOGGER.error("Missing required configuration items")
         return None
 
-    _LOGGER.debug("Setting up Tuya IR Remote Control: name=%s, dev_id=%s, host=%s, local_key=%s, protocol_version=%s, persistent_connection=%s, cloud_info=%s", name, dev_id, host, local_key, protocol_version, persistent_connection, cloud_info)
+    _LOGGER.debug("Setting up Tuya IR Remote Control: name=%s, dev_id=%s, host=%s, protocol_version=%s, persistent_connection=%s", name, dev_id, host, protocol_version, persistent_connection)
 
     remote = TuyaRC(name, dev_id, host, local_key, protocol_version, persistent_connection, cloud_info)
     await hass.async_add_executor_job(remote._update_availibility)
@@ -174,7 +175,7 @@ class TuyaRC(RemoteEntity):
             name=self._name,
             manufacturer="Tuya",
             identifiers={(DOMAIN, self._dev_id)},
-            connections={(DOMAIN, self._cloud_info['mac'])} if self._cloud_info and 'mac' in self._cloud_info else set(),
+            connections={(dr.CONNECTION_NETWORK_MAC, self._cloud_info['mac'])} if self._cloud_info and 'mac' in self._cloud_info else set(),
             model=self._cloud_info['model'] if self._cloud_info and 'model' in self._cloud_info else None,
             serial_number=self._cloud_info['sn'] if self._cloud_info and 'sn' in self._cloud_info else None,
         )
@@ -329,6 +330,8 @@ class TuyaRC(RemoteEntity):
                         _LOGGER.debug("Sending command, code: '%s'", code)
                     if code.startswith("rf:"):
                         await self.hass.async_add_executor_job(self._send_button_rf, code[3:])
+                    elif code.startswith("rfraw:"):
+                        await self.hass.async_add_executor_job(self._send_button_rf, code[6:])
                     else:
                         pulses = rc_auto_encode(code)
                         _LOGGER.debug("Command pulses: %s", pulses)
@@ -442,6 +445,9 @@ class TuyaRC(RemoteEntity):
         
         if not device:
             raise HomeAssistantError("You need to specify a device.")
+
+        if not commands:
+            raise HomeAssistantError("You need to specify at least one command to delete.")
 
         await self._async_load_storage_files()
 

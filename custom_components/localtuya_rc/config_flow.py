@@ -201,7 +201,7 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     def _test_connection(self, dev_id, address, local_key, version):
-        _LOGGER.debug("Testing connection to %s at %s with key %s", dev_id, address, local_key)
+        _LOGGER.debug("Testing connection to %s at %s", dev_id, address)
         device = Contrib.IRRemoteControlDevice(dev_id=dev_id, address=address, local_key=local_key, version=version, connection_timeout=5, connection_retry_delay=0.5, connection_retry_limit=2)
         try:
             status = device.status()
@@ -211,8 +211,10 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             device.close()
             raise
 
-    async def async_step_config(self, user_input=None, errors={}):
+    async def async_step_config(self, user_input=None, errors=None):
         """Last config step"""
+        if errors is None:
+            errors = {}
         if user_input is not None:
             self.config[CONF_NAME] = user_input[CONF_NAME]
             self.config[CONF_HOST] = user_input[CONF_HOST]
@@ -231,7 +233,7 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except Exception as e:
                     _LOGGER.error("Device test error, exception %s: %s", type(e), e, exc_info=True)
                     continue
-                if "Error" not in status:
+                if status and "Error" not in status:
                     # Close previously tested device if any
                     if device:
                         device.close()
@@ -257,7 +259,7 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if self.cloud and 'key' in self.cloud_info:
                     del self.cloud_info['key'] # to protect the key
                 self.config[CONF_CLOUD_INFO] = self.cloud_info if self.cloud else None
-                _LOGGER.debug("Config: %s", self.config)
+                _LOGGER.debug("Config ready for device %s at %s (protocol %s)", self.config.get(CONF_DEVICE_ID), self.config.get(CONF_HOST), version_ok)
                 await self.async_set_unique_id(self.config[CONF_DEVICE_ID])
                 return self.async_create_entry(title=self.config[CONF_NAME], data=self.config)
         versions_sorted = TUYA_VERSIONS.copy()
@@ -362,7 +364,7 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Reconfigure connection test at %s: %s", new_ip, e, exc_info=True)
                 errors["base"] = "cannot_connect"
 
-            if not errors and "Error" in status:
+            if not errors and (not status or "Error" in status):
                 errors["base"] = "cannot_connect"
 
             if not errors:
@@ -465,11 +467,11 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
         try:
             if self._learn_type == "rf":
                 button = await self.hass.async_add_executor_job(
-                    remote._receive_button_rf
+                    remote._receive_button_rf, 10
                 )
             else:
                 button = await self.hass.async_add_executor_job(
-                    remote._receive_button
+                    remote._receive_button, 10
                 )
 
             if isinstance(button, str) and button.startswith("ERROR"):
@@ -606,9 +608,6 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
                     "name": ac_name,
                 })
                 options["ac_devices"] = ac_devices
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=options
-                )
                 # Reload to create the climate entity
                 return self.async_create_entry(data=options)
 
@@ -639,9 +638,6 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
             if ac_id:
                 ac_devices = [d for d in ac_devices if d["id"] != ac_id]
                 options["ac_devices"] = ac_devices
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=options
-                )
                 # Reload to remove the climate entity
                 return self.async_create_entry(data=options)
 
