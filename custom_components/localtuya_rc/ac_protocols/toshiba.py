@@ -5,6 +5,11 @@ https://github.com/ikke-t/toshiba-ac-ir-remote
 
 Supports Toshiba Heat Pump RAS-10PKVP-ND (remote WH-H07JE) and compatible models.
 """
+from __future__ import annotations
+
+from homeassistant.components.climate import HVACMode, SWING_ON, SWING_OFF
+
+from . import ACProtocol, register_brand
 
 # IR timing constants (microseconds)
 HDR_MARK = 4400
@@ -34,11 +39,11 @@ FAN_4 = 5
 FAN_5 = 6
 
 HVAC_MODE_MAP = {
-    "auto": MODE_AUTO,
-    "cool": MODE_COOL,
-    "dry": MODE_DRY,
-    "heat": MODE_HEAT,
-    "off": MODE_OFF,
+    HVACMode.AUTO: MODE_AUTO,
+    HVACMode.COOL: MODE_COOL,
+    HVACMode.DRY: MODE_DRY,
+    HVACMode.HEAT: MODE_HEAT,
+    HVACMode.OFF: MODE_OFF,
 }
 
 FAN_MODE_MAP = {
@@ -74,63 +79,54 @@ def _xor_parity(data: list[int]) -> int:
     return parity
 
 
-def encode_command(temp: int = 23, mode: str = "auto", fan: str = "auto", pure: bool = False) -> list[int]:
-    """Encode a Toshiba HEAT_PUMP_CMD (on with settings) to IR pulses.
+@register_brand("toshiba")
+class ToshibaProtocol(ACProtocol):
+    """Toshiba AC IR protocol."""
 
-    Args:
-        temp: Temperature in Celsius (17-30)
-        mode: HVAC mode (auto, cool, dry, heat, off)
-        fan: Fan speed (auto, 1, 2, 3, 4, 5)
-        pure: Air purifier on/off
+    @property
+    def min_temp(self) -> int:
+        return TEMP_MIN
 
-    Returns:
-        List of pulse timings in microseconds.
-    """
-    temp = max(TEMP_MIN, min(TEMP_MAX, temp))
-    mode_val = HVAC_MODE_MAP.get(mode, MODE_AUTO)
-    fan_val = FAN_MODE_MAP.get(fan, FAN_AUTO)
+    @property
+    def max_temp(self) -> int:
+        return TEMP_MAX
 
-    # Build 9-byte frame
-    data = [0xF2, 0x0D, 0x03, 0xFC, 0x01]
+    @property
+    def hvac_modes(self) -> list[HVACMode]:
+        return [HVACMode.OFF, HVACMode.AUTO, HVACMode.COOL, HVACMode.DRY, HVACMode.HEAT]
 
-    # Byte 5: temp in low nibble
-    byte5 = (temp - TEMP_BASE) & 0x0F
-    data.append(byte5)
+    @property
+    def fan_modes(self) -> list[str]:
+        return ["auto", "1", "2", "3", "4", "5"]
 
-    # Byte 6: fan (high 3 bits) | mode (low nibble)
-    byte6 = ((fan_val & 0x07) << 5) | (mode_val & 0x0F)
-    data.append(byte6)
+    @property
+    def has_swing(self) -> bool:
+        return True
 
-    # Byte 7: pure (bit 4)
-    byte7 = (0x10 if pure else 0x00)
-    data.append(byte7)
+    def encode_state(self, mode: HVACMode, temp: int, fan: str) -> list[int]:
+        """Encode the full AC state to IR pulse timings."""
+        if mode == HVACMode.OFF:
+            return self._encode_command(temp=TEMP_MIN, mode_val=MODE_OFF, fan_val=FAN_AUTO)
+        mode_val = HVAC_MODE_MAP.get(mode, MODE_AUTO)
+        fan_val = FAN_MODE_MAP.get(fan, FAN_AUTO)
+        return self._encode_command(temp=temp, mode_val=mode_val, fan_val=fan_val)
 
-    # Byte 8: XOR parity
-    data.append(_xor_parity(data))
+    def encode_swing(self) -> list[int]:
+        """Encode horizontal swing toggle."""
+        return _bytes_to_pulses([0xF2, 0x0D, 0x01, 0xFE, 0x21, 0x04, 0x25])
 
-    return _bytes_to_pulses(data)
+    @staticmethod
+    def _encode_command(temp: int, mode_val: int, fan_val: int, pure: bool = False) -> list[int]:
+        """Encode a Toshiba HEAT_PUMP_CMD to IR pulses."""
+        temp = max(TEMP_MIN, min(TEMP_MAX, temp))
 
+        data = [0xF2, 0x0D, 0x03, 0xFC, 0x01]
+        byte5 = (temp - TEMP_BASE) & 0x0F
+        data.append(byte5)
+        byte6 = ((fan_val & 0x07) << 5) | (mode_val & 0x0F)
+        data.append(byte6)
+        byte7 = (0x10 if pure else 0x00)
+        data.append(byte7)
+        data.append(_xor_parity(data))
 
-def encode_off() -> list[int]:
-    """Encode a Toshiba power-off command to IR pulses."""
-    return encode_command(temp=TEMP_MIN, mode="off", fan="auto")
-
-
-def encode_swing() -> list[int]:
-    """Encode a Toshiba horizontal swing toggle to IR pulses."""
-    return _bytes_to_pulses([0xF2, 0x0D, 0x01, 0xFE, 0x21, 0x04, 0x25])
-
-
-def encode_vertical() -> list[int]:
-    """Encode a Toshiba vertical swing toggle to IR pulses."""
-    return _bytes_to_pulses([0xF2, 0x0D, 0x01, 0xFE, 0x21, 0x00, 0x21])
-
-
-def encode_hi_power() -> list[int]:
-    """Encode a Toshiba high-power toggle to IR pulses."""
-    return _bytes_to_pulses([0xF2, 0x0D, 0x04, 0xFB, 0x09, 0x00, 0x00, 0x00, 0x01, 0x08])
-
-
-def encode_sleep() -> list[int]:
-    """Encode a Toshiba sleep toggle to IR pulses."""
-    return _bytes_to_pulses([0xF2, 0x0D, 0x04, 0xFB, 0x09, 0x00, 0x00, 0x00, 0x03, 0x0A])
+        return _bytes_to_pulses(data)

@@ -1,4 +1,42 @@
 {
+    "exceptions": {
+        "tinytuya_ir_error": {
+            "message": "Internal IR communication error. Please check the logs for details."
+        },
+        "tinytuya_rf_error": {
+            "message": "Internal RF communication error. Please check the logs for details."
+        },
+        "remote_turned_off": {
+            "message": "Remote is turned off. Turn it on before sending commands."
+        },
+        "send_command_failed": {
+            "message": "Failed to send command: {error}"
+        },
+        "device_busy": {
+            "message": "Device is busy, please wait and try again."
+        },
+        "device_error": {
+            "message": "Device reported an error: {error}"
+        },
+        "learn_command_failed": {
+            "message": "Failed to learn command: {error}"
+        },
+        "no_device_specified": {
+            "message": "You need to specify a device."
+        },
+        "no_commands_specified": {
+            "message": "You need to specify at least one command to delete."
+        },
+        "device_not_found": {
+            "message": "Device '{device}' not found in the codes storage."
+        },
+        "command_not_found": {
+            "message": "Command '{command}' for device '{device}' not found."
+        },
+        "remote_entity_not_found": {
+            "message": "Remote entity not found for device {device_id}."
+        }
+    },
     "title": "LocalTuyaIR Remote Control",
     "config": {
         "abort": {
@@ -34,12 +72,12 @@
                 }
             },
             "ip_method": {
-                "title": "How to obtain the device IP address",
-                "description": "To obtain the device IP address, you can either scan your local network or enter it manually.",                
+                "title": "How to find the device",
+                "description": "Choose how to find your device on the network.",
                 "menu_options": {
-                    "pre_scan": "Scan the local network (recommended)",
+                    "scan": "Scan the local network",
                     "ask_ip": "Enter the IP address manually",
-                    "config": "Enter the IP address manually"
+                    "config": "Enter all details manually"
                 }
             },
             "ask_ip": {
@@ -47,12 +85,12 @@
                 "description": "Please enter the IP address of your Tuya Remote Control device and select the corresponding device from the Tuya cloud.",
                 "data": {
                     "host": "Device IP address",
-                    "device_id": "Device name"
+                    "device_id": "Device"
                 }
             },
-            "pre_scan": {
-                "title": "Network scan",
-                "description": "Now we need to find your device on the network. It can take up to 30 seconds."
+            "scan_failed": {
+                "title": "Scan failed",
+                "description": "No Tuya devices were found on the network. Make sure the device is online and connected to the same network.\n\nPress submit to go back and try a different method."
             },
             "scan": {
                 "title": "Select device",
@@ -63,14 +101,13 @@
             },
             "config": {
                 "title": "Configure your Tuya Remote Control device",
-                "description": "Please enter the IP address, device ID and local key of your Tuya Remote Control device.",
+                "description": "Verify the details below and adjust if needed. The connection will be tested automatically.",
                 "data": {
                     "name": "Device name",
                     "host": "Host",
                     "device_id": "Device ID",
                     "local_key": "Local key",
-                    "protocol_version": "Protocol version (usually 3.3 or 3.4)",
-                    "persistent_connection": "Persistent connection (faster but can be unstable)"
+                    "protocol_version": "Protocol version (usually 3.3 or 3.4)"
                 }
             },
             "reconfigure": {

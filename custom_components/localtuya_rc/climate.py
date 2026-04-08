@@ -19,21 +19,9 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN
-from .ac_protocols import toshiba as toshiba_ac
+from .ac_protocols import get_protocol
 
 _LOGGER = logging.getLogger(__name__)
-
-# Map HA HVAC modes to Toshiba protocol mode strings
-HVAC_TO_TOSHIBA = {
-    HVACMode.AUTO: "auto",
-    HVACMode.COOL: "cool",
-    HVACMode.DRY: "dry",
-    HVACMode.HEAT: "heat",
-    HVACMode.OFF: "off",
-}
-
-# HA fan mode names → Toshiba fan strings
-FAN_MODES = ["auto", "1", "2", "3", "4", "5"]
 
 SWING_MODES = [SWING_OFF, SWING_ON]
 
@@ -49,50 +37,54 @@ async def async_setup_entry(hass, entry, async_add_entities):
         name = ac_cfg.get("name", "AC")
         ac_id = ac_cfg.get("id", "ac_0")
 
-        if brand == "toshiba":
-            entities.append(
-                ToshibaACClimate(hass, dev_id, ac_id, name, entry.entry_id)
-            )
+        protocol = get_protocol(brand)
+        if protocol is None:
+            _LOGGER.warning("Unknown AC brand '%s', skipping", brand)
+            continue
+
+        entities.append(
+            ACClimate(hass, dev_id, ac_id, name, entry.entry_id, protocol)
+        )
 
     if entities:
         async_add_entities(entities)
 
 
-class ToshibaACClimate(ClimateEntity, RestoreEntity):
-    """Climate entity that sends Toshiba AC IR commands via a Tuya remote."""
+class ACClimate(ClimateEntity, RestoreEntity):
+    """Climate entity that sends AC IR commands via a Tuya remote."""
 
     _attr_has_entity_name = False
     _attr_should_poll = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_min_temp = 17
-    _attr_max_temp = 30
     _attr_target_temperature_step = 1
-    _attr_hvac_modes = [
-        HVACMode.OFF,
-        HVACMode.AUTO,
-        HVACMode.COOL,
-        HVACMode.DRY,
-        HVACMode.HEAT,
-    ]
-    _attr_fan_modes = FAN_MODES
-    _attr_swing_modes = SWING_MODES
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.FAN_MODE
-        | ClimateEntityFeature.SWING_MODE
-    )
 
-    def __init__(self, hass, dev_id, ac_id, name, entry_id):
+    def __init__(self, hass, dev_id, ac_id, name, entry_id, protocol):
         self._dev_id = dev_id
         self._ac_id = ac_id
         self._entry_id = entry_id
+        self._protocol = protocol
         self._attr_unique_id = f"{dev_id}_ac_{ac_id}"
         self._attr_name = name
+
+        # Configure from protocol
+        self._attr_min_temp = protocol.min_temp
+        self._attr_max_temp = protocol.max_temp
+        self._attr_hvac_modes = protocol.hvac_modes
+        self._attr_fan_modes = protocol.fan_modes
+
+        features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.FAN_MODE
+        )
+        if protocol.has_swing:
+            features |= ClimateEntityFeature.SWING_MODE
+            self._attr_swing_modes = SWING_MODES
+        self._attr_supported_features = features
 
         # Optimistic state defaults
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_target_temperature = 23
-        self._attr_fan_mode = "auto"
+        self._attr_fan_mode = protocol.fan_modes[0] if protocol.fan_modes else "auto"
         self._attr_swing_mode = SWING_OFF
         self._swing_state = False
 
@@ -104,18 +96,20 @@ class ToshibaACClimate(ClimateEntity, RestoreEntity):
 
     @property
     def available(self):
-        """Climate entity is available only when the remote device is available."""
+        """Climate entity is available only when the remote is on and reachable."""
         entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
         remote = entry_data.get("remote")
         if remote is None:
             return False
-        return remote.available
+        return remote.is_on and remote.available
 
     async def async_added_to_hass(self):
         """Restore previous state on startup."""
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state is None:
+            # Write state immediately so the entity is available right after setup
+            self.async_write_ha_state()
             return
 
         if last_state.state in [m.value for m in self._attr_hvac_modes]:
@@ -124,11 +118,14 @@ class ToshibaACClimate(ClimateEntity, RestoreEntity):
         attrs = last_state.attributes
         if "temperature" in attrs and attrs["temperature"] is not None:
             self._attr_target_temperature = int(attrs["temperature"])
-        if "fan_mode" in attrs and attrs["fan_mode"] in FAN_MODES:
+        if "fan_mode" in attrs and attrs["fan_mode"] in self._attr_fan_modes:
             self._attr_fan_mode = attrs["fan_mode"]
         if "swing_mode" in attrs:
             self._attr_swing_mode = attrs["swing_mode"]
             self._swing_state = attrs["swing_mode"] == SWING_ON
+
+        # Write state immediately so the entity is available right after setup
+        self.async_write_ha_state()
 
     async def _send_pulses(self, pulses: list[int]):
         """Send raw IR pulses via the remote entity."""
@@ -138,7 +135,9 @@ class ToshibaACClimate(ClimateEntity, RestoreEntity):
         )
         if not remote_entity_id:
             raise HomeAssistantError(
-                f"Remote entity not found for device {self._dev_id}"
+                translation_domain=DOMAIN,
+                translation_key="remote_entity_not_found",
+                translation_placeholders={"device_id": self._dev_id},
             )
 
         raw_command = "raw:" + ",".join(str(p) for p in pulses)
@@ -152,43 +151,57 @@ class ToshibaACClimate(ClimateEntity, RestoreEntity):
 
     async def _send_state(self):
         """Encode and send the current optimistic state as an IR command."""
-        if self._attr_hvac_mode == HVACMode.OFF:
-            pulses = toshiba_ac.encode_off()
-        else:
-            mode_str = HVAC_TO_TOSHIBA.get(self._attr_hvac_mode, "auto")
-            pulses = toshiba_ac.encode_command(
-                temp=int(self._attr_target_temperature),
-                mode=mode_str,
-                fan=self._attr_fan_mode,
-            )
+        pulses = self._protocol.encode_state(
+            mode=self._attr_hvac_mode,
+            temp=int(self._attr_target_temperature),
+            fan=self._attr_fan_mode,
+        )
         await self._send_pulses(pulses)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode):
+        prev_mode = self._attr_hvac_mode
         self._attr_hvac_mode = hvac_mode
-        await self._send_state()
+        try:
+            await self._send_state()
+        except Exception:
+            self._attr_hvac_mode = prev_mode
+            raise
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs):
         temp = kwargs.get(ATTR_TEMPERATURE)
+        prev_temp = self._attr_target_temperature
+        prev_mode = self._attr_hvac_mode
         if temp is not None:
             self._attr_target_temperature = int(temp)
         if self._attr_hvac_mode == HVACMode.OFF:
             self._attr_hvac_mode = HVACMode.AUTO
-        await self._send_state()
+        try:
+            await self._send_state()
+        except Exception:
+            self._attr_target_temperature = prev_temp
+            self._attr_hvac_mode = prev_mode
+            raise
         self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str):
+        prev_fan = self._attr_fan_mode
+        prev_mode = self._attr_hvac_mode
         self._attr_fan_mode = fan_mode
         if self._attr_hvac_mode == HVACMode.OFF:
             self._attr_hvac_mode = HVACMode.AUTO
-        await self._send_state()
+        try:
+            await self._send_state()
+        except Exception:
+            self._attr_fan_mode = prev_fan
+            self._attr_hvac_mode = prev_mode
+            raise
         self.async_write_ha_state()
 
     async def async_set_swing_mode(self, swing_mode: str):
         desired = swing_mode == SWING_ON
         if desired != self._swing_state:
-            # Toggle swing via IR
-            await self._send_pulses(toshiba_ac.encode_swing())
+            await self._send_pulses(self._protocol.encode_swing())
             self._swing_state = desired
         self._attr_swing_mode = swing_mode
         self.async_write_ha_state()

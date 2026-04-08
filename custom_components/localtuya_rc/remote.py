@@ -117,6 +117,7 @@ class TuyaRC(RemoteEntity):
         self._storage = None
         self._codes = {}
         self._available = False
+        self._is_on = True
 
         self._device = None
         self._device_RF = None
@@ -151,11 +152,13 @@ class TuyaRC(RemoteEntity):
 
     @property
     def available(self):
+        if not self._is_on:
+            return True  # Entity is visible but "off"
         return self._available
 
     @property
-    def state(self):
-        return 'online' if self._available else 'offline'
+    def is_on(self):
+        return self._is_on
 
     @property
     def name(self):
@@ -214,7 +217,10 @@ class TuyaRC(RemoteEntity):
             except Exception as e:
                 self._deinit()
                 _LOGGER.error("Failed to receive button, exception %s: %s", type(e), e, exc_info=True)
-                raise HomeAssistantError("tinytuya library internal error, please check the logs.")
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="tinytuya_ir_error",
+                )
     
     def _send_button(self, pulses):
         with self._lock:
@@ -226,7 +232,10 @@ class TuyaRC(RemoteEntity):
                         return self._device.send_button(pulses)
                     except Exception as e:
                         _LOGGER.error("Failed to send command as base64, exception %s: %s", type(e), e, exc_info=True)
-                        raise HomeAssistantError("tinytuya library internal error, please check the logs.")
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key="tinytuya_ir_error",
+                        )
                 else:
                     _LOGGER.debug("Sending command as pulses: '%s'", pulses)
                     b64 = Contrib.IRRemoteControlDevice.pulses_to_base64(pulses)
@@ -235,7 +244,10 @@ class TuyaRC(RemoteEntity):
                         return self._device.send_button(b64)
                     except Exception as e:
                         _LOGGER.error("Failed to send command as pulses, exception %s: %s", type(e), e, exc_info=True)
-                        raise HomeAssistantError("tinytuya library internal error, please check the logs.")
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key="tinytuya_ir_error",
+                        )
             except Exception as e:
                 self._deinit()
                 raise e
@@ -248,7 +260,10 @@ class TuyaRC(RemoteEntity):
             except Exception as e:
                 self._deinit()
                 _LOGGER.error("Failed to receive RF button, exception %s: %s", type(e), e, exc_info=True)
-                raise HomeAssistantError("tinytuya library internal rf error, please check the logs.")
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="tinytuya_rf_error",
+                )
     
     def _send_button_rf(self, base64):
         with self._lock:
@@ -259,23 +274,40 @@ class TuyaRC(RemoteEntity):
                     return self._device_RF.rf_send_button(base64)
                 except Exception as e:
                     _LOGGER.error("Failed to send RF button, exception %s: %s", type(e), e, exc_info=True)
-                    raise HomeAssistantError("tinytuya library internal rf error, please check the logs.")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="tinytuya_rf_error",
+                    )
             except Exception as e:
                 self._deinit()
                 raise e
 
     async def _async_load_storage_files(self):
         if not self._storage:
-            self._storage = Store(self.hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
-        self._codes.update(await self._storage.async_load() or {})
+            self._storage = Store(self.hass, CODE_STORAGE_VERSION, f"{CODE_STORAGE_CODES}_{self._dev_id}")
+            # One-time migration from shared global storage
+            data = await self._storage.async_load()
+            if data is None:
+                old_storage = Store(self.hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
+                old_data = await old_storage.async_load()
+                if old_data:
+                    await self._storage.async_save(old_data)
+                    data = old_data
+            self._codes.update(data or {})
+        else:
+            self._codes.update(await self._storage.async_load() or {})
 
     async def async_turn_on(self, **kwargs):
-        """Turn the device on (no-op for IR blaster)."""
-        pass
+        """Enable the remote and connect to the device."""
+        self._is_on = True
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs):
-        """Turn the device off (no-op for IR blaster)."""
-        pass
+        """Disable the remote and disconnect from the device."""
+        self._is_on = False
+        await self.hass.async_add_executor_job(self._locked_deinit)
+        self._available = False
+        self.async_write_ha_state()
 
     def _update_availibility(self):
         with self._lock:
@@ -299,11 +331,18 @@ class TuyaRC(RemoteEntity):
 
     async def async_update(self):
         """Update the device."""
+        if not self._is_on:
+            return
         await self.hass.async_add_executor_job(self._update_availibility)
         await self._async_load_storage_files()
 
     async def async_send_command(self, command, **kwargs):
         """Send a list of commands to a device."""
+        if not self._is_on:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="remote_turned_off",
+            )
         device = kwargs.get(ATTR_DEVICE, None)
         repeat = kwargs.get(ATTR_NUM_REPEATS, 1)
         repeat_delay = kwargs.get(ATTR_DELAY_SECS, 0)
@@ -341,7 +380,11 @@ class TuyaRC(RemoteEntity):
                         await asyncio.sleep(repeat_delay)
         except Exception as e:
             _LOGGER.error("Failed to send command, exception %s: %s", type(e), e, exc_info=True)
-            raise HomeAssistantError(str(e))
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="send_command_failed",
+                translation_placeholders={"error": str(e)},
+            )
 
     async def async_learn_command(self, **kwargs):
         """Learn a command to a device, or just show the received command code."""
@@ -362,7 +405,10 @@ class TuyaRC(RemoteEntity):
             if command_type != "ir" and command_type != "rf": raise NotImplementedError(f'Unknown command type "{command_type}", only "ir" and "rf" is supported.')
             if alternative != None: raise ValueError('"Alternative" option is not supported.')
             if self._lock.locked():
-                raise HomeAssistantError("Device is busy, please wait and try again.")
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="device_busy",
+                )
             async_create(
                 self.hass,
                 f'Press the "<b>{command}</b>" button.',
@@ -379,7 +425,11 @@ class TuyaRC(RemoteEntity):
             if button == None: raise TimeoutError("Timeout. Please try again.")
             if isinstance(button, dict) and "Error" in button:
                 await self.hass.async_add_executor_job(self._locked_deinit)
-                raise HomeAssistantError(button["Error"])
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="device_error",
+                    translation_placeholders={"error": button["Error"]},
+                )
             if not isinstance(button, str):
                 await self.hass.async_add_executor_job(self._locked_deinit)
                 raise ValueError(f"Invalid response: {button}")
@@ -436,7 +486,11 @@ class TuyaRC(RemoteEntity):
                 title=NOTIFICATION_TITLE,
                 notification_id=notification_id,
             )
-            raise HomeAssistantError(str(e))
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="learn_command_failed",
+                translation_placeholders={"error": str(e)},
+            )
 
     async def async_delete_command(self, **kwargs):
         """Delete a command from a device."""
@@ -444,15 +498,25 @@ class TuyaRC(RemoteEntity):
         commands = kwargs.get(ATTR_COMMAND, [])
         
         if not device:
-            raise HomeAssistantError("You need to specify a device.")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="no_device_specified",
+            )
 
         if not commands:
-            raise HomeAssistantError("You need to specify at least one command to delete.")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="no_commands_specified",
+            )
 
         await self._async_load_storage_files()
 
         if not device in self._codes:
-            raise HomeAssistantError(f"Device '{device}' not found in the codes storage.")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="device_not_found",
+                translation_placeholders={"device": device},
+            )
 
         deleted = False
         for command in commands:
@@ -465,7 +529,11 @@ class TuyaRC(RemoteEntity):
                     title=NOTIFICATION_TITLE
                 )
         if not deleted:
-            raise HomeAssistantError(f'Command "{command}" for device "{device}" not found.')
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_not_found",
+                translation_placeholders={"command": command, "device": device},
+            )
 
         # Remove device if no commands left
         if device in self._codes and not self._codes[device]:

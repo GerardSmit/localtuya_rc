@@ -23,7 +23,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up button entities from learned commands."""
     dev_id = entry.data.get(CONF_DEVICE_ID)
 
-    storage = Store(hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
+    storage = Store(hass, CODE_STORAGE_VERSION, f"{CODE_STORAGE_CODES}_{dev_id}")
     codes = await storage.async_load() or {}
 
     tracked_buttons = {}
@@ -35,7 +35,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             for command_name, code in commands.items():
                 uid = f"{dev_id}_btn_{device_name}_{command_name}"
                 if uid not in tracked_buttons:
-                    entity = TuyaRCButton(dev_id, device_name, command_name, code)
+                    entity = TuyaRCButton(dev_id, device_name, command_name, code, entry.entry_id)
                     entities.append(entity)
                     tracked_buttons[uid] = entity
         return entities
@@ -77,11 +77,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class TuyaRCButton(ButtonEntity):
     """Button entity for a learned IR/RF command."""
 
-    def __init__(self, dev_id, device_name, command_name, code):
+    _attr_should_poll = True
+
+    def __init__(self, dev_id, device_name, command_name, code, entry_id):
         self._dev_id = dev_id
         self._device_name = device_name
         self._command_name = command_name
         self._code = code
+        self._entry_id = entry_id
         self._attr_unique_id = f"{dev_id}_btn_{device_name}_{command_name}"
         self._attr_name = f"{device_name} {command_name}"
         self._attr_icon = "mdi:remote"
@@ -92,6 +95,15 @@ class TuyaRCButton(ButtonEntity):
             identifiers={(DOMAIN, self._dev_id)},
         )
 
+    @property
+    def available(self):
+        """Button is available only when the remote is on and reachable."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        remote = entry_data.get("remote")
+        if remote is None:
+            return False
+        return remote.is_on and remote.available
+
     async def async_press(self):
         """Send the learned command."""
         registry = er.async_get(self.hass)
@@ -99,7 +111,9 @@ class TuyaRCButton(ButtonEntity):
 
         if not remote_entity_id:
             raise HomeAssistantError(
-                f"Remote entity not found for device {self._dev_id}"
+                translation_domain=DOMAIN,
+                translation_key="remote_entity_not_found",
+                translation_placeholders={"device_id": self._dev_id},
             )
 
         await self.hass.services.async_call(

@@ -1,4 +1,42 @@
 {
+    "exceptions": {
+        "tinytuya_ir_error": {
+            "message": "Erro interno de comunicação IR. Verifique os registros para detalhes."
+        },
+        "tinytuya_rf_error": {
+            "message": "Erro interno de comunicação RF. Verifique os registros para detalhes."
+        },
+        "remote_turned_off": {
+            "message": "O controle remoto está desligado. Ligue-o antes de enviar comandos."
+        },
+        "send_command_failed": {
+            "message": "Falha ao enviar comando: {error}"
+        },
+        "device_busy": {
+            "message": "Dispositivo ocupado, aguarde e tente novamente."
+        },
+        "device_error": {
+            "message": "O dispositivo relatou um erro: {error}"
+        },
+        "learn_command_failed": {
+            "message": "Falha ao aprender comando: {error}"
+        },
+        "no_device_specified": {
+            "message": "Você precisa especificar um dispositivo."
+        },
+        "no_commands_specified": {
+            "message": "Você precisa especificar pelo menos um comando para excluir."
+        },
+        "device_not_found": {
+            "message": "Dispositivo '{device}' não encontrado no armazenamento de comandos."
+        },
+        "command_not_found": {
+            "message": "Comando '{command}' para dispositivo '{device}' não encontrado."
+        },
+        "remote_entity_not_found": {
+            "message": "Entidade de controle remoto não encontrada para dispositivo {device_id}."
+        }
+    },
     "title": "Controle Remoto LocalTuyaIR",
     "config": {
         "abort": {
@@ -34,12 +72,12 @@
                 }
             },
             "ip_method": {
-                "title": "Como obter o endereço IP do dispositivo",
-                "description": "Para obter o endereço IP do dispositivo, você pode escanear sua rede local ou inseri-lo manualmente.",
+                "title": "Como encontrar o dispositivo",
+                "description": "Escolha como encontrar seu dispositivo na rede.",
                 "menu_options": {
-                    "pre_scan": "Escanear a rede local (recomendado)",
+                    "scan": "Escanear a rede local",
                     "ask_ip": "Inserir o endereço IP manualmente",
-                    "config": "Inserir o endereço IP manualmente"
+                    "config": "Inserir todos os dados manualmente"
                 }
             },
             "ask_ip": {
@@ -47,12 +85,12 @@
                 "description": "Por favor, insira o endereço IP do seu dispositivo de Controle Remoto Tuya e selecione o dispositivo correspondente na nuvem Tuya.",
                 "data": {
                     "host": "Endereço IP do dispositivo",
-                    "device_id": "Nome do dispositivo"
+                    "device_id": "Dispositivo"
                 }
             },
-            "pre_scan": {
-                "title": "Varredura de rede",
-                "description": "Agora precisamos encontrar seu dispositivo na rede. Isso pode levar até 30 segundos."
+            "scan_failed": {
+                "title": "Varredura falhou",
+                "description": "Nenhum dispositivo Tuya foi encontrado na rede. Verifique se o dispositivo está online e conectado à mesma rede.\n\nPressione enviar para voltar e tentar outro método."
             },
             "scan": {
                 "title": "Selecione o dispositivo",
@@ -63,14 +101,13 @@
             },
             "config": {
                 "title": "Configurar seu dispositivo de Controle Remoto Tuya",
-                "description": "Por favor, insira o endereço IP, o ID do dispositivo e a chave local do seu dispositivo de Controle Remoto Tuya.",
+                "description": "Verifique os dados abaixo e ajuste se necessário. A conexão será testada automaticamente.",
                 "data": {
                     "name": "Nome do dispositivo",
                     "host": "Host",
                     "device_id": "ID do dispositivo",
                     "local_key": "Chave local",
-                    "protocol_version": "Versão do protocolo (geralmente 3.3 ou 3.4)",
-                    "persistent_connection": "Conexão persistente (mais rápida, mas exclusiva)"
+                    "protocol_version": "Versão do protocolo (geralmente 3.3 ou 3.4)"
                 }
             },
             "reconfigure": {
@@ -138,7 +175,7 @@
             "settings": {
                 "title": "Configurações do Dispositivo",
                 "data": {
-                    "persistent_connection": "Conexão persistente (mais rápida, mas exclusiva)"
+                    "persistent_connection": "Conexão persistente (mais rápida, mas pode ser instável)"
                 }
             },
             "add_ac": {

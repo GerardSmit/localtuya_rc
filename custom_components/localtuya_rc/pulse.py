@@ -36,12 +36,12 @@ def distance_decode(pulses, leading_pulse, leading_gap, pulse, gap_0, gap_1, bit
         ValueError: If the pulse sequence does not match the expected format.
     """
     # Decode pulses into bits based on provided timings and bit_length
+    if len(pulses) < 3 + bit_length * 2:
+        raise ValueError(f"Invalid data length: {len(pulses)} (must be at least {3 + bit_length * 2})")
     if not in_range(pulses[0], leading_pulse):
         raise ValueError(f"Invalid leading pulse length: {pulses[0]}")
     if not in_range(pulses[1], leading_gap):
         raise ValueError(f"Invalid leading gap length: {pulses[1]}")
-    if len(pulses) < 3 + bit_length * 2:
-        raise ValueError(f"Invalid data length: {len(pulses)} (must be at least {3 + bit_length * 2})")
 
     long_pulse_v = True if gap_1 > gap_0 else False
     short_pulse_v = not long_pulse_v
@@ -86,12 +86,12 @@ def width_decode(pulses, leading_pulse, leading_gap, gap, pulse_0, pulse_1, bit_
         ValueError: If the pulse lengths do not match the expected values or if the data length is invalid.
     """
     # Decode gaps into bits based on provided timings and bit_length
+    if len(pulses) < 2 + bit_length * 2:
+        raise ValueError(f"Invalid data length: {len(pulses)} (must be at least {2 + bit_length * 2})")
     if not in_range(pulses[0], leading_pulse):
         raise ValueError(f"Invalid leading pulse length: {pulses[0]}")
     if not in_range(pulses[1], leading_gap):
         raise ValueError(f"Invalid leading gap length: {pulses[1]}")
-    if len(pulses) < 2 + bit_length * 2:
-        raise ValueError(f"Invalid data length: {len(pulses)} (must be at least {2 + bit_length * 2})")
     
     long_pulse_v = True if pulse_1 > pulse_0 else False
     short_pulse_v = not long_pulse_v

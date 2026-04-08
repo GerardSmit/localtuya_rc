@@ -1,4 +1,42 @@
 {
+    "exceptions": {
+        "tinytuya_ir_error": {
+            "message": "Interne IR-communicatiefout. Controleer de logbestanden voor details."
+        },
+        "tinytuya_rf_error": {
+            "message": "Interne RF-communicatiefout. Controleer de logbestanden voor details."
+        },
+        "remote_turned_off": {
+            "message": "De afstandsbediening is uitgeschakeld. Schakel deze in voordat u commando's verstuurt."
+        },
+        "send_command_failed": {
+            "message": "Commando versturen mislukt: {error}"
+        },
+        "device_busy": {
+            "message": "Apparaat is bezig, probeer het later opnieuw."
+        },
+        "device_error": {
+            "message": "Apparaat heeft een fout gemeld: {error}"
+        },
+        "learn_command_failed": {
+            "message": "Commando aanleren mislukt: {error}"
+        },
+        "no_device_specified": {
+            "message": "U moet een apparaat opgeven."
+        },
+        "no_commands_specified": {
+            "message": "U moet ten minste één commando opgeven om te verwijderen."
+        },
+        "device_not_found": {
+            "message": "Apparaat '{device}' niet gevonden in de configuratie."
+        },
+        "command_not_found": {
+            "message": "Commando '{command}' voor apparaat '{device}' niet gevonden."
+        },
+        "remote_entity_not_found": {
+            "message": "Afstandsbedieningsentiteit niet gevonden voor apparaat {device_id}."
+        }
+    },
     "title": "LocalTuyaIR Afstandsbediening",
     "config": {
         "abort": {
@@ -34,12 +72,12 @@
                 }
             },
             "ip_method": {
-                "title": "Hoe u het IP-adres van het apparaat kunt achterhalen",
-                "description": "Om het IP-adres van het apparaat te verkrijgen, kunt u uw lokale netwerk scannen of het handmatig invoeren.",
+                "title": "Hoe het apparaat vinden",
+                "description": "Kies hoe u uw apparaat op het netwerk wilt vinden.",
                 "menu_options": {
-                    "pre_scan": "Het lokale netwerk scannen (aanbevolen)",
+                    "scan": "Het lokale netwerk scannen",
                     "ask_ip": "Het IP-adres handmatig invoeren",
-                    "config": "Het IP-adres handmatig invoeren"
+                    "config": "Alle gegevens handmatig invoeren"
                 }
             },
             "ask_ip": {
@@ -47,12 +85,12 @@
                 "description": "Voer het IP-adres van uw Tuya-afstandsbediening in en selecteer het bijbehorende apparaat uit de Tuya-cloud.",
                 "data": {
                     "host": "IP-adres van het apparaat",
-                    "device_id": "Apparaatnaam"
+                    "device_id": "Apparaat"
                 }
             },
-            "pre_scan": {
-                "title": "Netwerkscan",
-                "description": "Nu moeten we uw apparaat op het netwerk vinden. Dit kan tot 30 seconden duren."
+            "scan_failed": {
+                "title": "Scan mislukt",
+                "description": "Er zijn geen Tuya-apparaten gevonden op het netwerk. Controleer of het apparaat online is en met hetzelfde netwerk is verbonden.\n\nDruk op verzenden om terug te gaan en een andere methode te proberen."
             },
             "scan": {
                 "title": "Selecteer apparaat",
@@ -63,14 +101,13 @@
             },
             "config": {
                 "title": "Configureer uw Tuya-afstandsbediening",
-                "description": "Voer het IP-adres, de apparaat-ID en de lokale sleutel van uw Tuya-afstandsbediening in.",
+                "description": "Controleer de onderstaande gegevens en pas aan indien nodig. De verbinding wordt automatisch getest.",
                 "data": {
                     "name": "Apparaatnaam",
                     "host": "Host",
                     "device_id": "Apparaat-ID",
                     "local_key": "Lokale sleutel",
-                    "protocol_version": "Protocolversie (meestal 3.3 of 3.4)",
-                    "persistent_connection": "Permanente verbinding (sneller maar kan instabiel zijn)"
+                    "protocol_version": "Protocolversie (meestal 3.3 of 3.4)"
                 }
             },
             "reconfigure": {

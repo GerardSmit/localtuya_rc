@@ -413,8 +413,8 @@ def kaseikyo_encode(vendor_id, genre1, genre2, data, id):
         raise ValueError("Genre1 must be in range 0x0-0xF")
     if not (0x0 <= genre2 <= 0xF):
         raise ValueError("Genre2 must be in range 0x0-0xF")
-    if not (0x000 <= data <= 0xFFF):
-        raise ValueError("Data must be in range 0x000-0xFFF")
+    if not (0x000 <= data <= 0x3FF):
+        raise ValueError("Data must be in range 0x000-0x3FF")
     if not (0x0 <= id <= 0x3):
         raise ValueError("ID must be in range 0x0-0x3")
     output = [
@@ -468,7 +468,7 @@ def pioneer_decode(values):
     if data[0] != data[1] ^ 0xFF or data[2] != data[3] ^ 0xFF:
         raise ValueError("Invalid Pioneer xored data")
     addr = data[0]
-    cmd = data[1]
+    cmd = data[2]
     return f"addr=0x{addr:02X},cmd=0x{cmd:02X}"
 
 def pioneer_encode(addr, cmd):
@@ -575,7 +575,7 @@ def rc_auto_decode(values, force_raw=False):
         for name, (_, decoder) in RC_CONVERTERS.items():
             try:
                 return f"{name}:{decoder(values)}"
-            except ValueError:
+            except (ValueError, IndexError):
                 pass
     # Return raw data otherwise
     if len(values) % 2 == 0:

@@ -106,35 +106,37 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema
         )
 
-    async def async_step_ip_method(self, user_input=None, errors={}):
+    async def async_step_ip_method(self, user_input=None):
         """Ask user to scan for devices or enter the IP manually."""
         if self.cloud:
             return self.async_show_menu(
                 step_id="ip_method",
-                menu_options=["pre_scan", "ask_ip"])
+                menu_options=["scan", "ask_ip"])
         else:
             return self.async_show_menu(
                 step_id="ip_method",
-                menu_options=["pre_scan", "config"])
+                menu_options=["scan", "config"])
         
-    async def async_step_ask_ip(self, user_input=None, errors={}):
+    async def async_step_ask_ip(self, user_input=None, errors=None):
         """Ask user to enter the IP manually."""
+        if errors is None:
+            errors = {}
         if user_input is not None:
+            selected_id = user_input[CONF_DEVICE_ID]
             self.config[CONF_HOST] = user_input[CONF_HOST]
-            id = user_input[CONF_DEVICE_ID].split(' ')[-1][1:-1]
-            self.config[CONF_DEVICE_ID] = id
-            devices = [device for device in self.cloud_devices if device['id'] == id]
+            self.config[CONF_DEVICE_ID] = selected_id
+            devices = [device for device in self.cloud_devices if device['id'] == selected_id]
             if not devices:
                 return await self.async_step_ask_ip(errors={"base": "unknown"})
             self.cloud_info = devices[0]
             self.config[CONF_NAME] = devices[0]['name']
             self.config[CONF_LOCAL_KEY] = devices[0]['key']
             return await self.async_step_config()
-        device_list = [f"{device['name']} ({device['id']})" for device in self.cloud_devices]
+        device_map = {device['id']: f"{device['name']} ({device['id']})" for device in self.cloud_devices}
         schema = vol.Schema(
             {
                 vol.Required(CONF_HOST, default=self.config[CONF_HOST]): cv.string,
-                vol.Required(CONF_DEVICE_ID): vol.In(device_list),
+                vol.Required(CONF_DEVICE_ID): vol.In(device_map),
             }
         )
         return self.async_show_form(
@@ -143,15 +145,9 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema
         )
 
-    async def async_step_pre_scan(self, user_input=None, errors={}):
-        """Just show a message to the user."""
-        if user_input is not None:
-            return await self.async_step_scan()
-        return self.async_show_form(
-            step_id="pre_scan",
-            errors=errors,
-            data_schema=vol.Schema({})
-        )
+    async def async_step_pre_scan(self, user_input=None):
+        """Legacy step — redirect to scan."""
+        return await self.async_step_scan()
 
     async def async_step_scan(self, user_input=None):
         """Scan local network for devices."""
@@ -175,7 +171,10 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 device = self.scan_devices[ip]
                 _LOGGER.debug("Device found: %s", device)
             if len(self.scan_devices) == 0:
-                return await self.async_step_pre_scan(errors={"base": "tuya_not_found"})
+                return self.async_show_form(
+                    step_id="scan_failed",
+                    data_schema=vol.Schema({}),
+                )
             if not self.cloud:
                 ip_list = [f"{ip} ({self.scan_devices[ip]['gwId']})" for ip in self.scan_devices]
             else:
@@ -186,19 +185,29 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             ip_list.append(f"{ip} - {device['name']}")
                             break
                 if len(ip_list) == 0:
-                    return await self.async_step_pre_scan(errors={"base": "tuya_not_found"})
+                    return self.async_show_form(
+                        step_id="scan_failed",
+                        data_schema=vol.Schema({}),
+                    )
             schema = vol.Schema(
             {
                 vol.Required(CONF_HOST): vol.In(ip_list)
             })
         except Exception as e:
             _LOGGER.error("Scan error: %s", e, exc_info=True)
-            return self.async_abort(reason='unknown')
+            return self.async_show_form(
+                step_id="scan_failed",
+                data_schema=vol.Schema({}),
+            )
         return self.async_show_form(
             step_id="scan",
             errors=errors,
             data_schema=schema
         )
+
+    async def async_step_scan_failed(self, user_input=None):
+        """Scan failed — offer to go back or enter manually."""
+        return await self.async_step_ip_method()
 
     def _test_connection(self, dev_id, address, local_key, version):
         _LOGGER.debug("Testing connection to %s at %s", dev_id, address)
@@ -218,18 +227,20 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self.config[CONF_NAME] = user_input[CONF_NAME]
             self.config[CONF_HOST] = user_input[CONF_HOST]
-            self.config[CONF_DEVICE_ID] = user_input[CONF_DEVICE_ID]
-            self.config[CONF_LOCAL_KEY] = user_input[CONF_LOCAL_KEY]
-            self.config[CONF_PERSISTENT_CONNECTION] = user_input[CONF_PERSISTENT_CONNECTION]
-            self.config[CONF_PROTOCOL_VERSION] = user_input[CONF_PROTOCOL_VERSION]
+            if not self.cloud:
+                self.config[CONF_DEVICE_ID] = user_input[CONF_DEVICE_ID]
+                self.config[CONF_LOCAL_KEY] = user_input[CONF_LOCAL_KEY]
+            protocol_version = user_input.get(CONF_PROTOCOL_VERSION, "Auto")
+            self.config[CONF_PROTOCOL_VERSION] = protocol_version
+            self.config[CONF_PERSISTENT_CONNECTION] = DEFAULT_PERSISTENT_CONNECTION
             # Bruteforce the protocol version (in order of preference)
-            try_versions = TUYA_VERSIONS if user_input[CONF_PROTOCOL_VERSION] == "Auto" else [user_input[CONF_PROTOCOL_VERSION]]
+            try_versions = TUYA_VERSIONS if protocol_version == "Auto" else [protocol_version]
             version_ok = None
             device = None
             for version in try_versions:
                 _LOGGER.debug("Trying protocol version %s", version)
                 try:
-                    test_device, status = await self.hass.async_add_executor_job(self._test_connection, user_input[CONF_DEVICE_ID], user_input[CONF_HOST], user_input[CONF_LOCAL_KEY], version)
+                    test_device, status = await self.hass.async_add_executor_job(self._test_connection, self.config[CONF_DEVICE_ID], self.config[CONF_HOST], self.config[CONF_LOCAL_KEY], version)
                 except Exception as e:
                     _LOGGER.error("Device test error, exception %s: %s", type(e), e, exc_info=True)
                     continue
@@ -259,19 +270,30 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if self.cloud and 'key' in self.cloud_info:
                     del self.cloud_info['key'] # to protect the key
                 self.config[CONF_CLOUD_INFO] = self.cloud_info if self.cloud else None
+                # Strip cloud credentials — they're only needed during setup
+                for key in (CONF_REGION, CONF_CLIENT_ID, CONF_CLIENT_SECRET):
+                    self.config.pop(key, None)
                 _LOGGER.debug("Config ready for device %s at %s (protocol %s)", self.config.get(CONF_DEVICE_ID), self.config.get(CONF_HOST), version_ok)
                 await self.async_set_unique_id(self.config[CONF_DEVICE_ID])
                 return self.async_create_entry(title=self.config[CONF_NAME], data=self.config)
-        versions_sorted = TUYA_VERSIONS.copy()
-        versions_sorted.sort()
-        schema = vol.Schema({
-            vol.Required(CONF_NAME, default=self.config[CONF_NAME]): cv.string,
-            vol.Required(CONF_HOST, default=self.config[CONF_HOST]): cv.string,
-            vol.Required(CONF_DEVICE_ID, default=self.config[CONF_DEVICE_ID]): cv.string,
-            vol.Required(CONF_LOCAL_KEY, default=self.config[CONF_LOCAL_KEY]): cv.string,
-            vol.Required(CONF_PROTOCOL_VERSION, default=self.config[CONF_PROTOCOL_VERSION]): vol.In(["Auto"] + versions_sorted),
-            vol.Required(CONF_PERSISTENT_CONNECTION, default=self.config[CONF_PERSISTENT_CONNECTION]): cv.boolean
-        })
+
+        if self.cloud:
+            # Cloud path: device ID and local key already known
+            schema = vol.Schema({
+                vol.Required(CONF_NAME, default=self.config[CONF_NAME]): cv.string,
+                vol.Required(CONF_HOST, default=self.config[CONF_HOST]): cv.string,
+            })
+        else:
+            # Manual path: user must provide all details
+            versions_sorted = TUYA_VERSIONS.copy()
+            versions_sorted.sort()
+            schema = vol.Schema({
+                vol.Required(CONF_NAME, default=self.config[CONF_NAME]): cv.string,
+                vol.Required(CONF_HOST, default=self.config[CONF_HOST]): cv.string,
+                vol.Required(CONF_DEVICE_ID, default=self.config[CONF_DEVICE_ID]): cv.string,
+                vol.Required(CONF_LOCAL_KEY, default=self.config[CONF_LOCAL_KEY]): cv.string,
+                vol.Required(CONF_PROTOCOL_VERSION, default=self.config[CONF_PROTOCOL_VERSION]): vol.In(["Auto"] + versions_sorted),
+            })
         return self.async_show_form(
             step_id="config",
             errors=errors,
@@ -391,7 +413,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
         self._learn_device = None
         self._learn_command = None
         self._learn_type = None
-        _LOGGER.debug("Options flow init, current config: %s", self.config)
+        _LOGGER.debug("Options flow init for device %s", self.config.get(CONF_DEVICE_ID))
 
     async def async_step_init(self, user_input=None):
         """Show main menu."""
@@ -487,7 +509,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
                 decoded = "rf:" + button
 
             # Save to storage
-            storage = Store(self.hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
+            storage = Store(self.hass, CODE_STORAGE_VERSION, f"{CODE_STORAGE_CODES}_{dev_id}")
             codes = await storage.async_load() or {}
             codes.setdefault(self._learn_device, {})[self._learn_command] = decoded
             await storage.async_save(codes)
@@ -530,7 +552,8 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_manage_commands(self, user_input=None):
         """List learned commands and allow deletion."""
-        storage = Store(self.hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
+        dev_id = self.entry.data.get(CONF_DEVICE_ID)
+        storage = Store(self.hass, CODE_STORAGE_VERSION, f"{CODE_STORAGE_CODES}_{dev_id}")
         codes = await storage.async_load() or {}
 
         # Build flat list of "device: command" entries
@@ -554,7 +577,6 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
                     await storage.async_save(codes)
 
                     # Update remote entity
-                    dev_id = self.entry.data.get(CONF_DEVICE_ID)
                     entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
                     remote = entry_data.get("remote")
                     if remote:
@@ -655,7 +677,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
         """Manage device settings (persistent connection toggle)."""
         if user_input is not None:
             self.config[CONF_PERSISTENT_CONNECTION] = user_input[CONF_PERSISTENT_CONNECTION]
-            _LOGGER.debug("Config updated: %s", self.config)
+            _LOGGER.debug("Settings updated for device %s", self.config.get(CONF_DEVICE_ID))
             self.hass.config_entries.async_update_entry(self.entry, data=self.config)
             return self.async_create_entry(data=dict(self.entry.options))
 
