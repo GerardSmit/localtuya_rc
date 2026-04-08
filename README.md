@@ -1,12 +1,17 @@
 # LocalTuyaIR Remote Control integration for Home Assistant
 
+> **Fork Notice:** This is a modified fork of [ClusterM/localtuya_rc](https://github.com/ClusterM/localtuya_rc), maintained at [GerardSmit/localtuya_rc](https://github.com/GerardSmit/localtuya_rc). Changes include: improved reconnection reliability, a UI-based options flow for learning and managing commands, button entities for learned commands, a Toshiba AC climate entity, reconfigure flow for IP changes, and various bug fixes. This fork is distributed under the same GPLv3 license as the original.
+
 Many users rely on the [LocalTuya](https://github.com/rospogrigio/localtuya) integration for Home Assistant to control Tuya-based devices locally, without relying on cloud services. However, this popular integration currently does not support IR remote controller emulators. As a result, those wishing to integrate Tuya’s Wi-Fi-based IR remote emulators into their smart home environment are left without a straightforward solution.
 
 ![image](https://github.com/user-attachments/assets/a7f441d4-75b2-4a68-aadd-288f4f013149)
 
-This integration addresses that gap. It provides full local control of Tuya Wi-Fi IR remote controllers within Home Assistant, entirely bypassing the Tuya cloud. By doing so, you gain:
-* Local Control: No external cloud services required. All communication remains within your local network, improving reliability and responsiveness.
-* Flexible IR Control: Seamlessly integrate Wi-Fi-based IR remote emulators from Tuya, enabling you to manage a wide range of IR-controlled devices—such as TVs, air conditioners, and audio systems—directly from Home Assistant.
+This integration addresses that gap. It provides full local control of Tuya Wi-Fi IR/RF remote controllers within Home Assistant, entirely bypassing the Tuya cloud. By doing so, you gain:
+* **Local Control:** No external cloud services required. All communication remains within your local network, improving reliability and responsiveness.
+* **Flexible IR/RF Control:** Seamlessly integrate Wi-Fi-based IR and RF remote emulators from Tuya, enabling you to manage a wide range of IR/RF-controlled devices — such as TVs, air conditioners, and audio systems — directly from Home Assistant.
+* **Button Entities:** Each learned command automatically gets its own button entity, so you can trigger commands directly from the UI or dashboards without service calls.
+* **AC Climate Control:** Add preconfigured AC controllers (currently Toshiba) as full Climate entities with temperature, mode, fan speed, and swing controls.
+* **UI-Based Command Management:** Learn, manage, and delete commands from the integration's options flow — no YAML or service calls needed.
 
 
 ## Integration setup
@@ -17,7 +22,7 @@ The Home Assistant Community Store (HACS) is a powerful tool that allows you to 
 
 Just click on the button:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=clusterm&repository=localtuya_rc)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=GerardSmit&repository=localtuya_rc)
 
 Or follow these steps:
 * Navigate to HACS → Integrations in your Home Assistant sidebar.
@@ -30,7 +35,7 @@ Or follow these steps:
 
 #### Manual Installation
 If you prefer manual installation or are not using HACS, follow these steps:
-* Visit the [Releases](https://github.com/ClusterM/localtuya_rc/releases) page of the integration's GitHub repository.
+* Visit the [Releases](https://github.com/GerardSmit/localtuya_rc/releases) page of the integration's GitHub repository.
 * Download the latest .zip file.
 * Unzip the downloaded file.
 * Locate the "localtuya_rc" directory inside the extracted contents (in "custom_components" directory).
@@ -114,9 +119,23 @@ remote:
 
 ## How to use
 
-This integration creates a new "remote.*" entity for your IR remote controller. But "Remote" entities are not directly controllable. You must use the `remote.send_command` service to send IR commands to your device and `remote.learn_command` service to learn new commands (read button codes from your remote). So, you can create scripts, automations, or even use the `remote.send_command` service directly from the Developer Tools to control your IR devices.
+This integration creates a **Remote** entity for your IR/RF remote controller, along with **Button** entities for each learned command. You can control your devices in several ways:
 
-### Learn new commands (how to get button codes)
+### Using the UI (Recommended)
+
+**Learning commands:** Go to the device page in Home Assistant, click **Configure**, and select **Learn a new command**. Enter the device name and command name, then press the button on your physical remote when prompted.
+
+**Sending commands:** Each learned command automatically appears as a button entity. Simply press the button in the UI, add it to a dashboard card, or use it in automations.
+
+**Managing commands:** Use **Configure → Manage learned commands** to delete commands you no longer need.
+
+**Adding AC controllers:** Use **Configure → Add AC controller** to create a Climate entity with full temperature, mode, fan speed, and swing controls (currently supports Toshiba AC).
+
+### Using service calls
+
+You can also use the `remote.send_command` and `remote.learn_command` services directly for scripts and automations.
+
+#### Learn new commands (how to get button codes)
 
 To learn new commands, call the `remote.learn_command` service and pass the entity_id of your remote controller. You can do it from the Developer Tools. You must specify a `command` parameter with the name of the command you want to learn. 
 You can make integration to remember the button code by passing a `device` parameter. If you don't pass it, the button code will be shown in the notification only.
@@ -131,7 +150,7 @@ This integration tries to decode the button code using different IR protocols. I
 
 Please note that this Tuya device is a crappy one (at least my one) and it may require multiple attempts to learn a command. Sometimes it may not work at all until you restart the device. If you have any issues with learning commands, please try to restart the device and try again.
 
-### Send commands
+#### Send commands
 
 To send commands, call the `remote.send_command` service and pass the entity_id of your remote controller. You can use it in scripts and automations. Of course, you can try it from the Developer Tools as well. There are two methods to send commands: specifying a name of the previously learned command or passing a button code. To send a command by name, you must specify a `device` parameter with the name of the device you specified during learning:
 
@@ -234,12 +253,6 @@ The `toggle` parameter can be 0 or 1 and is optional. It helps to distinguish be
 
 ## Credits
 
-* This integration is based on the TinyTuya https://github.com/jasonacox/tinytuya by Jason Cox
-
-
-## Donate
-
-* [Become a sponsor on GitHub](https://github.com/sponsors/ClusterM)
-* [Buy Me A Coffee](https://www.buymeacoffee.com/cluster)
-* [Donation Alerts](https://www.donationalerts.com/r/clustermeerkat)
-* [Boosty](https://boosty.to/cluster)
+* Originally created by [ClusterM](https://github.com/ClusterM/localtuya_rc)
+* This integration is based on [TinyTuya](https://github.com/jasonacox/tinytuya) by Jason Cox
+* Toshiba AC protocol based on [ikke-t/toshiba-ac-ir-remote](https://github.com/ikke-t/toshiba-ac-ir-remote)
