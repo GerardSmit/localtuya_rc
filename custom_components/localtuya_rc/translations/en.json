@@ -77,11 +77,54 @@
     "options": {
         "step": {
             "init": {
-                "title": "Configure your Tuya Remote Control device",
+                "title": "Remote Control Options",
+                "description": "What would you like to do?",
+                "menu_options": {
+                    "learn_command": "Learn a new command",
+                    "manage_commands": "Manage learned commands",
+                    "settings": "Device settings"
+                }
+            },
+            "learn_command": {
+                "title": "Learn Command",
+                "description": "Enter the device name, command name, and signal type to learn.",
+                "data": {
+                    "device": "Device name (e.g. TV, AC)",
+                    "command": "Command name (e.g. power, vol_up)",
+                    "command_type": "Signal type"
+                }
+            },
+            "learn_wait": {
+                "title": "Learning {type} Command",
+                "description": "Point your remote at the IR/RF receiver and press the button you want to learn for **{device}** → **{command}**.\n\nThen click **Submit** to capture the signal."
+            },
+            "learn_done": {
+                "title": "Learn Result",
+                "description": "{result}"
+            },
+            "manage_commands": {
+                "title": "Manage Commands",
+                "description": "Select a command to delete.",
+                "data": {
+                    "command_to_delete": "Command to delete"
+                }
+            },
+            "manage_commands_empty": {
+                "title": "Manage Commands",
+                "description": "No learned commands found. Use 'Learn a new command' to add some."
+            },
+            "settings": {
+                "title": "Device Settings",
                 "data": {
                     "persistent_connection": "Persistent connection (faster but can be unstable)"
                 }
             }
+        },
+        "error": {
+            "learn_timeout": "No signal received. Make sure you pressed the remote button while the device was listening.",
+            "learn_error": "An error occurred while learning the command. Check the logs for details.",
+            "device_not_ready": "The remote device is not available. Make sure it is online and try again.",
+            "required": "This field is required."
         }
     }
 }

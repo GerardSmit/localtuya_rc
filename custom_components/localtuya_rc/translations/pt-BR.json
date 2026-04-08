@@ -77,11 +77,54 @@
     "options": {
         "step": {
             "init": {
-                "title": "Configurar seu dispositivo de Controle Remoto Tuya",
+                "title": "Opções do Controle Remoto",
+                "description": "O que você gostaria de fazer?",
+                "menu_options": {
+                    "learn_command": "Aprender um novo comando",
+                    "manage_commands": "Gerenciar comandos aprendidos",
+                    "settings": "Configurações do dispositivo"
+                }
+            },
+            "learn_command": {
+                "title": "Aprender Comando",
+                "description": "Insira o nome do dispositivo, o nome do comando e o tipo de sinal para aprender.",
+                "data": {
+                    "device": "Nome do dispositivo (ex: TV, AC)",
+                    "command": "Nome do comando (ex: power, vol_up)",
+                    "command_type": "Tipo de sinal"
+                }
+            },
+            "learn_wait": {
+                "title": "Aprendendo Comando {type}",
+                "description": "Aponte o controle remoto para o receptor IR/RF e pressione o botão que deseja aprender para **{device}** → **{command}**.\n\nDepois clique em **Enviar** para capturar o sinal."
+            },
+            "learn_done": {
+                "title": "Resultado do Aprendizado",
+                "description": "{result}"
+            },
+            "manage_commands": {
+                "title": "Gerenciar Comandos",
+                "description": "Selecione um comando para excluir.",
+                "data": {
+                    "command_to_delete": "Comando para excluir"
+                }
+            },
+            "manage_commands_empty": {
+                "title": "Gerenciar Comandos",
+                "description": "Nenhum comando aprendido encontrado. Use 'Aprender um novo comando' para adicionar."
+            },
+            "settings": {
+                "title": "Configurações do Dispositivo",
                 "data": {
                     "persistent_connection": "Conexão persistente (mais rápida, mas exclusiva)"
                 }
             }
+        },
+        "error": {
+            "learn_timeout": "Nenhum sinal recebido. Certifique-se de ter pressionado o botão do controle enquanto o dispositivo estava ouvindo.",
+            "learn_error": "Ocorreu um erro ao aprender o comando. Verifique os logs para detalhes.",
+            "device_not_ready": "O dispositivo remoto não está disponível. Certifique-se de que está online e tente novamente.",
+            "required": "Este campo é obrigatório."
         }
     }
 }

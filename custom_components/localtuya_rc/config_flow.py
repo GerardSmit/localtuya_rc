@@ -18,6 +18,11 @@ from homeassistant.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET
 )
+from homeassistant.helpers.storage import Store
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.exceptions import HomeAssistantError
+
+from .rc_encoder import rc_auto_decode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -172,7 +177,7 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if len(self.scan_devices) == 0:
                 return await self.async_step_pre_scan(errors={"base": "tuya_not_found"})
             if not self.cloud:
-                ip_list = [f"{ip} ({self.scan_devices[ip]["gwId"]})" for ip in self.scan_devices]
+                ip_list = [f"{ip} ({self.scan_devices[ip]['gwId']})" for ip in self.scan_devices]
             else:
                 ip_list = []
                 for ip in self.scan_devices:
@@ -279,21 +284,208 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
         """Initialize the options flow."""
         self.entry = entry
         self.config = dict(entry.data.items())
+        self._learn_device = None
+        self._learn_command = None
+        self._learn_type = None
         _LOGGER.debug("Options flow init, current config: %s", self.config)
 
     async def async_step_init(self, user_input=None):
-        """Manage the options."""
+        """Show main menu."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["learn_command", "manage_commands", "settings"],
+        )
+
+    # ── Learn Command ──────────────────────────────────────────────
+
+    async def async_step_learn_command(self, user_input=None):
+        """Step 1: Enter device name, command name, and type."""
+        errors = {}
+        if user_input is not None:
+            self._learn_device = user_input.get("device", "").strip()
+            self._learn_command = user_input.get("command", "").strip()
+            self._learn_type = user_input.get("command_type", "ir")
+            if not self._learn_device:
+                errors["device"] = "required"
+            elif not self._learn_command:
+                errors["command"] = "required"
+            else:
+                return await self.async_step_learn_wait()
+
+        schema = vol.Schema({
+            vol.Required("device", default=self._learn_device or ""): cv.string,
+            vol.Required("command", default=self._learn_command or ""): cv.string,
+            vol.Required("command_type", default="ir"): vol.In({"ir": "IR (infrared)", "rf": "RF (radio)"}),
+        })
+        return self.async_show_form(
+            step_id="learn_command",
+            data_schema=schema,
+            errors=errors,
+        )
+
+    async def async_step_learn_wait(self, user_input=None):
+        """Step 2: Instruct user to press the button, then do the learning."""
+        if user_input is not None:
+            return await self._async_do_learn()
+
+        return self.async_show_form(
+            step_id="learn_wait",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "device": self._learn_device,
+                "command": self._learn_command,
+                "type": self._learn_type.upper(),
+            },
+        )
+
+    async def _async_do_learn(self):
+        """Execute the learning process via the remote entity."""
+        dev_id = self.entry.data.get(CONF_DEVICE_ID)
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+        remote = entry_data.get("remote")
+
+        if remote is None or not remote.available:
+            return self.async_show_form(
+                step_id="learn_done",
+                data_schema=vol.Schema({}),
+                errors={"base": "device_not_ready"},
+                description_placeholders={"result": ""},
+            )
+
+        try:
+            if self._learn_type == "rf":
+                button = await self.hass.async_add_executor_job(
+                    remote._receive_button_rf
+                )
+            else:
+                button = await self.hass.async_add_executor_job(
+                    remote._receive_button
+                )
+
+            if isinstance(button, str) and button.startswith("ERROR"):
+                raise Exception(button)
+            if not button:
+                raise TimeoutError("No signal received")
+
+            # Decode
+            if self._learn_type == "ir":
+                pulses = Contrib.IRRemoteControlDevice.base64_to_pulses(button)
+                decoded = rc_auto_decode(pulses)
+            else:
+                decoded = "rf:" + button
+
+            # Save to storage
+            storage = Store(self.hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
+            codes = await storage.async_load() or {}
+            codes.setdefault(self._learn_device, {})[self._learn_command] = decoded
+            await storage.async_save(codes)
+
+            # Update remote entity's in-memory codes and notify button platform
+            remote._codes = codes
+            remote.schedule_update_ha_state()
+            async_dispatcher_send(
+                self.hass, f"{SIGNAL_COMMANDS_UPDATED}_{dev_id}"
+            )
+
+            return self.async_show_form(
+                step_id="learn_done",
+                data_schema=vol.Schema({}),
+                description_placeholders={
+                    "result": f"✅ Learned **{self._learn_command}** for **{self._learn_device}**\n\nCode: `{decoded}`",
+                },
+            )
+        except TimeoutError:
+            return self.async_show_form(
+                step_id="learn_done",
+                data_schema=vol.Schema({}),
+                errors={"base": "learn_timeout"},
+                description_placeholders={"result": ""},
+            )
+        except Exception as e:
+            _LOGGER.error("Learn error: %s", e, exc_info=True)
+            return self.async_show_form(
+                step_id="learn_done",
+                data_schema=vol.Schema({}),
+                errors={"base": "learn_error"},
+                description_placeholders={"result": ""},
+            )
+
+    async def async_step_learn_done(self, user_input=None):
+        """Show result and return to menu."""
+        return await self.async_step_init()
+
+    # ── Manage Commands ────────────────────────────────────────────
+
+    async def async_step_manage_commands(self, user_input=None):
+        """List learned commands and allow deletion."""
+        storage = Store(self.hass, CODE_STORAGE_VERSION, CODE_STORAGE_CODES)
+        codes = await storage.async_load() or {}
+
+        # Build flat list of "device: command" entries
+        command_list = {}
+        for device_name, commands in codes.items():
+            for command_name in commands:
+                key = f"{device_name}: {command_name}"
+                command_list[key] = key
+
+        if not command_list:
+            return await self.async_step_manage_commands_empty()
+
+        if user_input is not None:
+            selected = user_input.get("command_to_delete")
+            if selected and ": " in selected:
+                dev, cmd = selected.split(": ", 1)
+                if dev in codes and cmd in codes[dev]:
+                    del codes[dev][cmd]
+                    if not codes[dev]:
+                        del codes[dev]
+                    await storage.async_save(codes)
+
+                    # Update remote entity
+                    dev_id = self.entry.data.get(CONF_DEVICE_ID)
+                    entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+                    remote = entry_data.get("remote")
+                    if remote:
+                        remote._codes = codes
+                        remote.schedule_update_ha_state()
+                    async_dispatcher_send(
+                        self.hass,
+                        f"{SIGNAL_COMMANDS_UPDATED}_{dev_id}",
+                    )
+            return await self.async_step_init()
+
+        schema = vol.Schema({
+            vol.Required("command_to_delete"): vol.In(command_list),
+        })
+        return self.async_show_form(
+            step_id="manage_commands",
+            data_schema=schema,
+        )
+
+    async def async_step_manage_commands_empty(self, user_input=None):
+        """No commands to manage."""
+        if user_input is not None:
+            return await self.async_step_init()
+        return self.async_show_form(
+            step_id="manage_commands_empty",
+            data_schema=vol.Schema({}),
+        )
+
+    # ── Settings ───────────────────────────────────────────────────
+
+    async def async_step_settings(self, user_input=None):
+        """Manage device settings (persistent connection toggle)."""
         if user_input is not None:
             self.config[CONF_PERSISTENT_CONNECTION] = user_input[CONF_PERSISTENT_CONNECTION]
             _LOGGER.debug("Config updated: %s", self.config)
             self.hass.config_entries.async_update_entry(self.entry, data=self.config)
-            return self.async_create_entry(data=self.config)
+            return self.async_create_entry(data={})
 
         options_schema = vol.Schema({
             vol.Required(CONF_PERSISTENT_CONNECTION, default=self.config.get(CONF_PERSISTENT_CONNECTION, DEFAULT_PERSISTENT_CONNECTION)): cv.boolean
         })
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=options_schema
+            step_id="settings",
+            data_schema=options_schema,
         )

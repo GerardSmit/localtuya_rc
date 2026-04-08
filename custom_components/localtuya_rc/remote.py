@@ -17,7 +17,8 @@ from .const import (
     CODE_STORAGE_VERSION,
     CODE_STORAGE_CODES,
     NOTIFICATION_TITLE,
-    DEFAULT_PERSISTENT_CONNECTION
+    DEFAULT_PERSISTENT_CONNECTION,
+    SIGNAL_COMMANDS_UPDATED,
 )
 
 from homeassistant.const import (
@@ -42,6 +43,7 @@ from homeassistant.components.remote import (
     RemoteEntityFeature,
 )
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .rc_encoder import rc_auto_encode, rc_auto_decode
 
@@ -63,15 +65,25 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, entry, async_add_entities, discovery_info=None):
     """Set up the Tuya IR Remote Control entry."""
-    await async_setup_platform(hass, entry.data, async_add_entities, discovery_info)
+    remote = await _create_remote(hass, entry.data)
+    if remote:
+        hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})["remote"] = remote
+        async_add_entities([remote])
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up platform."""
-    if config == None:
+    """Set up platform (YAML)."""
+    remote = await _create_remote(hass, config)
+    if remote:
+        async_add_entities([remote])
+
+
+async def _create_remote(hass, config):
+    """Create a TuyaRC entity from config."""
+    if config is None:
         _LOGGER.error("Configuration is empty")
-        return
-    
+        return None
+
     name = config.get(CONF_NAME, DEFAULT_FRIENDLY_NAME)
     dev_id = config.get(CONF_DEVICE_ID)
     host = config.get(CONF_HOST)
@@ -82,15 +94,13 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
     if name is None or host is None or dev_id is None or local_key is None:
         _LOGGER.error("Missing required configuration items")
-        return
+        return None
 
     _LOGGER.debug("Setting up Tuya IR Remote Control: name=%s, dev_id=%s, host=%s, local_key=%s, protocol_version=%s, persistent_connection=%s, cloud_info=%s", name, dev_id, host, local_key, protocol_version, persistent_connection, cloud_info)
 
     remote = TuyaRC(name, dev_id, host, local_key, protocol_version, persistent_connection, cloud_info)
-    # Update availability of the device
     await hass.async_add_executor_job(remote._update_availibility)
-
-    async_add_entities([remote])
+    return remote
 
 
 class TuyaRC(RemoteEntity):
@@ -388,6 +398,7 @@ class TuyaRC(RemoteEntity):
                 self._codes.setdefault(device, {}).update({command: decoded})
                 await self._storage.async_save(self._codes)
                 self.schedule_update_ha_state() # Update device attributes
+                async_dispatcher_send(self.hass, f"{SIGNAL_COMMANDS_UPDATED}_{self._dev_id}")
                 msg = f'Successfully learned command "<b>{command}</b>" for device "<b>{device}</b>", code:\r\n<pre>{decoded}</pre>' + \
                     (f"Raw code:<pre>{decoded_raw}</pre>" if not decoded.startswith("raw:") else "") + \
                     "\n\nNow you can use this device identifier and command name in your automations and scripts with the 'remote.send_command' service. Example:" + \
@@ -452,3 +463,4 @@ class TuyaRC(RemoteEntity):
             del self._codes[device]
 
         await self._storage.async_save(self._codes)
+        async_dispatcher_send(self.hass, f"{SIGNAL_COMMANDS_UPDATED}_{self._dev_id}")
