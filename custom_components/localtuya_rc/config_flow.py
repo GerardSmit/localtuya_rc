@@ -276,6 +276,108 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema
         )
 
+    # ── Reconfigure (update IP) ────────────────────────────────────
+
+    async def async_step_reconfigure(self, user_input=None):
+        """Handle reconfiguration of the device (e.g. IP change)."""
+        entry = self._get_reconfigure_entry()
+        self.config = dict(entry.data)
+        return self.async_show_menu(
+            step_id="reconfigure",
+            menu_options=["reconfigure_scan", "reconfigure_manual"],
+        )
+
+    async def async_step_reconfigure_scan(self, user_input=None):
+        """Scan network to find the device at a new IP."""
+        entry = self._get_reconfigure_entry()
+        config = dict(entry.data)
+        dev_id = config[CONF_DEVICE_ID]
+        local_key = config[CONF_LOCAL_KEY]
+        protocol_version = config[CONF_PROTOCOL_VERSION]
+
+        try:
+            scan_devices = await self.hass.async_add_executor_job(tinytuya.deviceScan)
+        except Exception as e:
+            _LOGGER.error("Reconfigure scan error: %s", e, exc_info=True)
+            return self.async_show_form(
+                step_id="reconfigure_scan",
+                errors={"base": "unknown"},
+                data_schema=vol.Schema({}),
+            )
+
+        new_ip = None
+        for ip, device in scan_devices.items():
+            if device.get("gwId") == dev_id:
+                new_ip = ip
+                break
+
+        if not new_ip:
+            return self.async_show_form(
+                step_id="reconfigure_scan",
+                errors={"base": "tuya_not_found"},
+                data_schema=vol.Schema({}),
+            )
+
+        try:
+            test_device, status = await self.hass.async_add_executor_job(
+                self._test_connection, dev_id, new_ip, local_key, float(protocol_version)
+            )
+            test_device.close()
+        except Exception as e:
+            _LOGGER.error("Reconfigure connection test at %s: %s", new_ip, e, exc_info=True)
+            return self.async_show_form(
+                step_id="reconfigure_scan",
+                errors={"base": "cannot_connect"},
+                data_schema=vol.Schema({}),
+            )
+
+        if "Error" in status:
+            return self.async_show_form(
+                step_id="reconfigure_scan",
+                errors={"base": "cannot_connect"},
+                data_schema=vol.Schema({}),
+            )
+
+        config[CONF_HOST] = new_ip
+        return self.async_update_reload_and_abort(entry, data=config, reason="reconfigure_successful")
+
+    async def async_step_reconfigure_manual(self, user_input=None):
+        """Allow user to manually enter a new IP address."""
+        entry = self._get_reconfigure_entry()
+        config = dict(entry.data)
+        errors = {}
+
+        if user_input is not None:
+            new_ip = user_input[CONF_HOST]
+            dev_id = config[CONF_DEVICE_ID]
+            local_key = config[CONF_LOCAL_KEY]
+            protocol_version = config[CONF_PROTOCOL_VERSION]
+
+            try:
+                test_device, status = await self.hass.async_add_executor_job(
+                    self._test_connection, dev_id, new_ip, local_key, float(protocol_version)
+                )
+                test_device.close()
+            except Exception as e:
+                _LOGGER.error("Reconfigure connection test at %s: %s", new_ip, e, exc_info=True)
+                errors["base"] = "cannot_connect"
+
+            if not errors and "Error" in status:
+                errors["base"] = "cannot_connect"
+
+            if not errors:
+                config[CONF_HOST] = new_ip
+                return self.async_update_reload_and_abort(entry, data=config, reason="reconfigure_successful")
+
+        schema = vol.Schema({
+            vol.Required(CONF_HOST, default=config.get(CONF_HOST, "")): cv.string,
+        })
+        return self.async_show_form(
+            step_id="reconfigure_manual",
+            errors=errors,
+            data_schema=schema,
+        )
+
 
 class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
     """Options flow for LocalTuyaIR Remote Control."""

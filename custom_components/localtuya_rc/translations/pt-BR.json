@@ -3,7 +3,8 @@
     "config": {
         "abort": {
             "already_configured": "Erro: a integração para este dispositivo já está configurada.",
-            "unknown": "Erro desconhecido, por favor verifique os logs."
+            "unknown": "Erro desconhecido, por favor verifique os logs.",
+            "reconfigure_successful": "Dispositivo reconfigurado com sucesso."
         },
         "error": {
             "cannot_connect": "Não é possível conectar ao dispositivo. Verifique se o endereço, o ID do dispositivo, a chave local e a versão do protocolo estão corretos.",
@@ -70,6 +71,25 @@
                     "local_key": "Chave local",
                     "protocol_version": "Versão do protocolo (geralmente 3.3 ou 3.4)",
                     "persistent_connection": "Conexão persistente (mais rápida, mas exclusiva)"
+                }
+            },
+            "reconfigure": {
+                "title": "Atualizar Conexão do Dispositivo",
+                "description": "O endereço IP do dispositivo pode ter mudado. Escolha como atualizá-lo.",
+                "menu_options": {
+                    "reconfigure_scan": "Escanear a rede para encontrar o dispositivo",
+                    "reconfigure_manual": "Inserir um novo endereço IP manualmente"
+                }
+            },
+            "reconfigure_scan": {
+                "title": "Varredura de Rede",
+                "description": "Procurando o dispositivo na rede. Se o dispositivo não foi encontrado, verifique se está online e conectado à mesma rede, depois envie para tentar novamente."
+            },
+            "reconfigure_manual": {
+                "title": "Inserir Novo Endereço IP",
+                "description": "Insira o novo endereço IP do dispositivo. A conexão será testada antes de salvar.",
+                "data": {
+                    "host": "Endereço IP do dispositivo"
                 }
             }
         }
