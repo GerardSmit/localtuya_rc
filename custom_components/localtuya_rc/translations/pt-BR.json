@@ -82,6 +82,7 @@
                 "menu_options": {
                     "learn_command": "Aprender um novo comando",
                     "manage_commands": "Gerenciar comandos aprendidos",
+                    "add_ac": "Adicionar controlador de AC",
                     "settings": "Configurações do dispositivo"
                 }
             },
@@ -117,6 +118,14 @@
                 "title": "Configurações do Dispositivo",
                 "data": {
                     "persistent_connection": "Conexão persistente (mais rápida, mas exclusiva)"
+                }
+            },
+            "add_ac": {
+                "title": "Adicionar Controlador de AC",
+                "description": "Adicione um controlador de ar condicionado pré-configurado. O AC aparecerá como uma entidade Clima com controles completos de temperatura, modo e ventilador.",
+                "data": {
+                    "ac_name": "Nome do AC (ex: AC da Sala)",
+                    "ac_brand": "Marca do AC"
                 }
             }
         },

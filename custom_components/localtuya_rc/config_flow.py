@@ -293,7 +293,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
         """Show main menu."""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["learn_command", "manage_commands", "settings"],
+            menu_options=["learn_command", "manage_commands", "add_ac", "settings"],
         )
 
     # ── Learn Command ──────────────────────────────────────────────
@@ -469,6 +469,49 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="manage_commands_empty",
             data_schema=vol.Schema({}),
+        )
+
+    # ── AC Controllers ─────────────────────────────────────────────
+
+    async def async_step_add_ac(self, user_input=None):
+        """Add a preconfigured AC controller."""
+        errors = {}
+        if user_input is not None:
+            ac_name = user_input.get("ac_name", "").strip()
+            ac_brand = user_input.get("ac_brand", "toshiba")
+            if not ac_name:
+                errors["ac_name"] = "required"
+            else:
+                # Generate a unique id
+                options = dict(self.entry.options)
+                ac_devices = list(options.get("ac_devices", []))
+                existing_ids = [d.get("id", "") for d in ac_devices]
+                ac_id = f"ac_{len(ac_devices)}"
+                while ac_id in existing_ids:
+                    ac_id = f"ac_{int(ac_id.split('_')[1]) + 1}"
+
+                ac_devices.append({
+                    "id": ac_id,
+                    "brand": ac_brand,
+                    "name": ac_name,
+                })
+                options["ac_devices"] = ac_devices
+                self.hass.config_entries.async_update_entry(
+                    self.entry, options=options
+                )
+                # Reload to create the climate entity
+                return self.async_create_entry(data={})
+
+        schema = vol.Schema({
+            vol.Required("ac_name", default=""): cv.string,
+            vol.Required("ac_brand", default="toshiba"): vol.In({
+                "toshiba": "Toshiba",
+            }),
+        })
+        return self.async_show_form(
+            step_id="add_ac",
+            data_schema=schema,
+            errors=errors,
         )
 
     # ── Settings ───────────────────────────────────────────────────

@@ -11,7 +11,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.REMOTE, Platform.BUTTON]
+PLATFORMS = [Platform.REMOTE, Platform.BUTTON, Platform.CLIMATE]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
