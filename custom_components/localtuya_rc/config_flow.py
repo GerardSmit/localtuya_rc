@@ -610,7 +610,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
                     self.entry, options=options
                 )
                 # Reload to create the climate entity
-                return self.async_create_entry(data={})
+                return self.async_create_entry(data=options)
 
         schema = vol.Schema({
             vol.Required("ac_name", default=""): cv.string,
@@ -643,7 +643,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
                     self.entry, options=options
                 )
                 # Reload to remove the climate entity
-                return self.async_create_entry(data={})
+                return self.async_create_entry(data=options)
 
         schema = vol.Schema({
             vol.Required("ac_to_remove"): vol.In(ac_list),
@@ -661,7 +661,7 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
             self.config[CONF_PERSISTENT_CONNECTION] = user_input[CONF_PERSISTENT_CONNECTION]
             _LOGGER.debug("Config updated: %s", self.config)
             self.hass.config_entries.async_update_entry(self.entry, data=self.config)
-            return self.async_create_entry(data={})
+            return self.async_create_entry(data=dict(self.entry.options))
 
         options_schema = vol.Schema({
             vol.Required(CONF_PERSISTENT_CONNECTION, default=self.config.get(CONF_PERSISTENT_CONNECTION, DEFAULT_PERSISTENT_CONNECTION)): cv.boolean

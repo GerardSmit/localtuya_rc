@@ -128,7 +128,9 @@ class TuyaRC(RemoteEntity):
             self._deinit()
         _LOGGER.debug("Initializing device %s (address: %s, protocol_version: %s, persistent_connection: %s)...", self._dev_id, self._address, self._protocol_version, self._persistent_connection)
         self._device = Contrib.IRRemoteControlDevice(dev_id=self._dev_id, address=self._address, local_key=self._local_key, version=float(self._protocol_version), persist=self._persistent_connection)
-        self._device_RF = RFRemoteControlDevice.RFRemoteControlDevice(dev_id=self._dev_id, address=self._address, local_key=self._local_key, version=float(self._protocol_version), persist=self._persistent_connection)
+        # Reuse the control_type detected by IR device to avoid a second probe
+        ct = self._device.control_type if self._device.control_type else 0
+        self._device_RF = RFRemoteControlDevice.RFRemoteControlDevice(dev_id=self._dev_id, address=self._address, local_key=self._local_key, version=float(self._protocol_version), persist=self._persistent_connection, control_type=ct)
         _LOGGER.debug("Device %s initialized.", self._dev_id)
 
     def _deinit(self):
@@ -267,28 +269,29 @@ class TuyaRC(RemoteEntity):
         self._codes.update(await self._storage.async_load() or {})
 
     async def async_turn_on(self, **kwargs):
-        """Turn the device on."""
-        raise HomeAssistantError("Turning on is not supported for this device.")
+        """Turn the device on (no-op for IR blaster)."""
+        pass
 
     async def async_turn_off(self, **kwargs):
-        """Turn the device off."""
-        raise HomeAssistantError("Turning off is not supported for this device.")
+        """Turn the device off (no-op for IR blaster)."""
+        pass
 
     def _update_availibility(self):
         with self._lock:
             _LOGGER.debug("Updating device %s availibility...", self._dev_id)
             was_available = self._available
             try:
-                # Force a fresh connection if device was previously offline
-                self._init(force=not was_available)
+                # Force a fresh connection if device was previously offline or destroyed
+                needs_force = not was_available or self._device is None
+                self._init(force=needs_force)
                 status = self._device.status()
                 _LOGGER.debug(f"Device status: {status}")
-                self._available = status and not "Error" in status
+                self._available = status and "Error" not in status
                 if not self._available:
-                    _LOGGER.error("Device is not available, status: %s", status)
+                    _LOGGER.warning("Device is not available, status: %s", status)
             except Exception as e:
                 self._available = False
-                _LOGGER.error("Failed to update device, exception %s: %s", type(e), e, exc_info=True)
+                _LOGGER.warning("Failed to update device, exception %s: %s", type(e), e)
             if not self._available:
                 self._deinit()
             _LOGGER.debug("Device %s is available: %s", self._dev_id, self._available)
