@@ -393,9 +393,17 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         """Show main menu."""
+        menu = ["learn_command", "manage_commands", "add_ac"]
+
+        # Only show "Remove AC" if there are AC devices configured
+        ac_devices = self.entry.options.get("ac_devices", [])
+        if ac_devices:
+            menu.append("remove_ac")
+
+        menu.append("settings")
         return self.async_show_menu(
             step_id="init",
-            menu_options=["learn_command", "manage_commands", "add_ac", "settings"],
+            menu_options=menu,
         )
 
     # ── Learn Command ──────────────────────────────────────────────
@@ -614,6 +622,35 @@ class LocalTuyaIROptionsFlow(config_entries.OptionsFlow):
             step_id="add_ac",
             data_schema=schema,
             errors=errors,
+        )
+
+    async def async_step_remove_ac(self, user_input=None):
+        """Remove a configured AC controller."""
+        options = dict(self.entry.options)
+        ac_devices = list(options.get("ac_devices", []))
+
+        if not ac_devices:
+            return await self.async_step_init()
+
+        ac_list = {d["id"]: d["name"] for d in ac_devices}
+
+        if user_input is not None:
+            ac_id = user_input.get("ac_to_remove")
+            if ac_id:
+                ac_devices = [d for d in ac_devices if d["id"] != ac_id]
+                options["ac_devices"] = ac_devices
+                self.hass.config_entries.async_update_entry(
+                    self.entry, options=options
+                )
+                # Reload to remove the climate entity
+                return self.async_create_entry(data={})
+
+        schema = vol.Schema({
+            vol.Required("ac_to_remove"): vol.In(ac_list),
+        })
+        return self.async_show_form(
+            step_id="remove_ac",
+            data_schema=schema,
         )
 
     # ── Settings ───────────────────────────────────────────────────

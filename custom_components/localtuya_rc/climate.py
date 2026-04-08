@@ -101,6 +101,15 @@ class ToshibaACClimate(ClimateEntity, RestoreEntity):
             identifiers={(DOMAIN, self._dev_id)},
         )
 
+    @property
+    def available(self):
+        """Climate entity is available only when the remote device is available."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        remote = entry_data.get("remote")
+        if remote is None:
+            return False
+        return remote.available
+
     async def async_added_to_hass(self):
         """Restore previous state on startup."""
         await super().async_added_to_hass()

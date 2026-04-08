@@ -103,6 +103,7 @@
                     "learn_command": "Aprender um novo comando",
                     "manage_commands": "Gerenciar comandos aprendidos",
                     "add_ac": "Adicionar controlador de AC",
+                    "remove_ac": "Remover controlador de AC",
                     "settings": "Configurações do dispositivo"
                 }
             },
@@ -146,6 +147,13 @@
                 "data": {
                     "ac_name": "Nome do AC (ex: AC da Sala)",
                     "ac_brand": "Marca do AC"
+                }
+            },
+            "remove_ac": {
+                "title": "Remover Controlador de AC",
+                "description": "Selecione um controlador de AC para remover.",
+                "data": {
+                    "ac_to_remove": "Controlador de AC para remover"
                 }
             }
         },
