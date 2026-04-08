@@ -111,20 +111,30 @@ class TuyaRC(RemoteEntity):
         self._device_RF = None
         self._lock = threading.Lock()
 
-    def _init(self):
-        if self._device:
+    def _init(self, force=False):
+        if self._device and not force:
             return
-        _LOGGER.debug("Initializing device %s (address: %s, local_key: %s, protocol_version: %s, persistent_connection: %s)...", self._dev_id, self._address, self._local_key, self._protocol_version, self._persistent_connection)
+        if self._device or self._device_RF:
+            self._deinit()
+        _LOGGER.debug("Initializing device %s (address: %s, protocol_version: %s, persistent_connection: %s)...", self._dev_id, self._address, self._protocol_version, self._persistent_connection)
         self._device = Contrib.IRRemoteControlDevice(dev_id=self._dev_id, address=self._address, local_key=self._local_key, version=float(self._protocol_version), persist=self._persistent_connection)
-        _LOGGER.debug("Initializing device %s (address: %s, local_key: %s, protocol_version: %s, persistent_connection: %s)...", self._dev_id, self._address, self._local_key, self._protocol_version, self._persistent_connection)
         self._device_RF = RFRemoteControlDevice.RFRemoteControlDevice(dev_id=self._dev_id, address=self._address, local_key=self._local_key, version=float(self._protocol_version), persist=self._persistent_connection)
         _LOGGER.debug("Device %s initialized.", self._dev_id)
 
     def _deinit(self):
         if self._device:
-            self._device.close()
+            try:
+                self._device.close()
+            except Exception as e:
+                _LOGGER.debug("Error closing IR device: %s", e)
             self._device = None
-            _LOGGER.debug("Device %s deinitialized.", self._dev_id)
+        if self._device_RF:
+            try:
+                self._device_RF.close()
+            except Exception as e:
+                _LOGGER.debug("Error closing RF device: %s", e)
+            self._device_RF = None
+        _LOGGER.debug("Device %s deinitialized.", self._dev_id)
 
     @property
     def available(self):
@@ -177,7 +187,11 @@ class TuyaRC(RemoteEntity):
 
     async def async_will_remove_from_hass(self):
         _LOGGER.debug("Removing device %s from Home Assistant...", self._dev_id)
-        self._deinit()
+        await self.hass.async_add_executor_job(self._locked_deinit)
+
+    def _locked_deinit(self):
+        with self._lock:
+            self._deinit()
 
     def _receive_button(self, timeout):
         with self._lock:
@@ -185,6 +199,7 @@ class TuyaRC(RemoteEntity):
             try:
                 return self._device.receive_button(timeout)
             except Exception as e:
+                self._deinit()
                 _LOGGER.error("Failed to receive button, exception %s: %s", type(e), e, exc_info=True)
                 raise HomeAssistantError("tinytuya library internal error, please check the logs.")
     
@@ -192,11 +207,11 @@ class TuyaRC(RemoteEntity):
         with self._lock:
             try:
                 self._init()
-                if type(pulses) == str:
+                if isinstance(pulses, str):
                     _LOGGER.debug("Sending command as base64: '%s'", pulses)
                     try:
                         return self._device.send_button(pulses)
-                    except:
+                    except Exception as e:
                         _LOGGER.error("Failed to send command as base64, exception %s: %s", type(e), e, exc_info=True)
                         raise HomeAssistantError("tinytuya library internal error, please check the logs.")
                 else:
@@ -205,7 +220,7 @@ class TuyaRC(RemoteEntity):
                     _LOGGER.debug("Converted to base64: '%s'", b64)
                     try:
                         return self._device.send_button(b64)
-                    except:
+                    except Exception as e:
                         _LOGGER.error("Failed to send command as pulses, exception %s: %s", type(e), e, exc_info=True)
                         raise HomeAssistantError("tinytuya library internal error, please check the logs.")
             except Exception as e:
@@ -218,6 +233,7 @@ class TuyaRC(RemoteEntity):
             try:
                 return self._device_RF.rf_receive_button(timeout=timeout)
             except Exception as e:
+                self._deinit()
                 _LOGGER.error("Failed to receive RF button, exception %s: %s", type(e), e, exc_info=True)
                 raise HomeAssistantError("tinytuya library internal rf error, please check the logs.")
     
@@ -251,8 +267,10 @@ class TuyaRC(RemoteEntity):
     def _update_availibility(self):
         with self._lock:
             _LOGGER.debug("Updating device %s availibility...", self._dev_id)
+            was_available = self._available
             try:
-                self._init()
+                # Force a fresh connection if device was previously offline
+                self._init(force=not was_available)
                 status = self._device.status()
                 _LOGGER.debug(f"Device status: {status}")
                 self._available = status and not "Error" in status
@@ -282,6 +300,8 @@ class TuyaRC(RemoteEntity):
         
         try:
             await self._async_load_storage_files()
+            total_commands = repeat * len(command)
+            cmd_index = 0
             for n in range(repeat):
                 for cmd in command:
                     if device:
@@ -300,7 +320,8 @@ class TuyaRC(RemoteEntity):
                         pulses = rc_auto_encode(code)
                         _LOGGER.debug("Command pulses: %s", pulses)
                         await self.hass.async_add_executor_job(self._send_button, pulses)
-                    if n < repeat - 1 and repeat_delay > 0:
+                    cmd_index += 1
+                    if cmd_index < total_commands and repeat_delay > 0:
                         await asyncio.sleep(repeat_delay)
         except Exception as e:
             _LOGGER.error("Failed to send command, exception %s: %s", type(e), e, exc_info=True)
@@ -341,10 +362,10 @@ class TuyaRC(RemoteEntity):
             _LOGGER.debug("Button pressed: %s", button)
             if button == None: raise TimeoutError("Timeout. Please try again.")
             if isinstance(button, dict) and "Error" in button:
-                self._deinit()
+                await self.hass.async_add_executor_job(self._locked_deinit)
                 raise HomeAssistantError(button["Error"])
             if not isinstance(button, str):
-                self._deinit()
+                await self.hass.async_add_executor_job(self._locked_deinit)
                 raise ValueError(f"Invalid response: {button}")
             
             if command_type == "ir":

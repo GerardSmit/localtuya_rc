@@ -611,7 +611,7 @@ def rc_auto_encode(s):
             return data # raw base64 Tuya-format
         data = dict(v.split("=") for v in data.split(","))
         data = {k: int(v, 0) for k, v in data.items()}
-    except:
+    except (ValueError, KeyError, AttributeError):
         raise ValueError(f"Invalid command format: {s}")
     if fmt not in RC_CONVERTERS:
         raise ValueError(f"Unknown format: {fmt}")

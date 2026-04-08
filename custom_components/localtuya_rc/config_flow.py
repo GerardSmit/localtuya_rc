@@ -41,6 +41,7 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_HOST: '',
         }
         self.cloud = False
+        self.cloud_info = None
 
     @staticmethod
     @callback
@@ -118,6 +119,9 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             id = user_input[CONF_DEVICE_ID].split(' ')[-1][1:-1]
             self.config[CONF_DEVICE_ID] = id
             devices = [device for device in self.cloud_devices if device['id'] == id]
+            if not devices:
+                return await self.async_step_ask_ip(errors={"base": "unknown"})
+            self.cloud_info = devices[0]
             self.config[CONF_NAME] = devices[0]['name']
             self.config[CONF_LOCAL_KEY] = devices[0]['key']
             return await self.async_step_config()
@@ -194,9 +198,13 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _test_connection(self, dev_id, address, local_key, version):
         _LOGGER.debug("Testing connection to %s at %s with key %s", dev_id, address, local_key)
         device = Contrib.IRRemoteControlDevice(dev_id=dev_id, address=address, local_key=local_key, version=version, connection_timeout=5, connection_retry_delay=0.5, connection_retry_limit=2)
-        status = device.status()
-        _LOGGER.debug("Connection test status: %s, control type detected: %s", status, device.control_type)
-        return device, status
+        try:
+            status = device.status()
+            _LOGGER.debug("Connection test status: %s, control type detected: %s", status, device.control_type)
+            return device, status
+        except Exception:
+            device.close()
+            raise
 
     async def async_step_config(self, user_input=None, errors={}):
         """Last config step"""
@@ -210,25 +218,35 @@ class LocalTuyaIRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Bruteforce the protocol version (in order of preference)
             try_versions = TUYA_VERSIONS if user_input[CONF_PROTOCOL_VERSION] == "Auto" else [user_input[CONF_PROTOCOL_VERSION]]
             version_ok = None
+            device = None
             for version in try_versions:
                 _LOGGER.debug("Trying protocol version %s", version)
                 try:
-                    device, status = await self.hass.async_add_executor_job(self._test_connection, user_input[CONF_DEVICE_ID], user_input[CONF_HOST], user_input[CONF_LOCAL_KEY], version)
+                    test_device, status = await self.hass.async_add_executor_job(self._test_connection, user_input[CONF_DEVICE_ID], user_input[CONF_HOST], user_input[CONF_LOCAL_KEY], version)
                 except Exception as e:
                     _LOGGER.error("Device test error, exception %s: %s", type(e), e, exc_info=True)
                     continue
                 if "Error" not in status:
+                    # Close previously tested device if any
+                    if device:
+                        device.close()
+                    device = test_device
                     version_ok = version
                     break
+                else:
+                    test_device.close()
             if not version_ok:
                 errors["base"] = "cannot_connect"
                 _LOGGER.error(f"Cannot connect to device using any protocol version")
             elif not device.control_type:
                 errors["base"] = "no_control_type"
                 _LOGGER.error(f"Device test error: control type not detected")
+                device.close()
             elif self.config[CONF_DEVICE_ID] in self._async_current_ids():
+                device.close()
                 return self.async_abort(reason="already_configured")
             else:
+                device.close()
                 # Ok!
                 self.config[CONF_PROTOCOL_VERSION] = version_ok
                 if self.cloud and 'key' in self.cloud_info:
