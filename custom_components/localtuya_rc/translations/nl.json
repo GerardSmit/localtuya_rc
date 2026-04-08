@@ -1,0 +1,167 @@
+{
+    "title": "LocalTuyaIR Afstandsbediening",
+    "config": {
+        "abort": {
+            "already_configured": "Fout: integratie voor dit apparaat is al geconfigureerd.",
+            "unknown": "Onbekende fout, controleer de logbestanden.",
+            "reconfigure_successful": "Apparaat succesvol opnieuw geconfigureerd."
+        },
+        "error": {
+            "cannot_connect": "Kan geen verbinding maken met het apparaat. Controleer of het adres, apparaat-ID, lokale sleutel en protocolversie correct zijn.",
+            "no_control_type": "Kan het besturingstype niet detecteren. Mogelijk wordt het apparaat niet ondersteund.",
+            "tuya_not_found": "Geen Tuya-apparaten gevonden. Zorg ervoor dat het online is en verbonden met hetzelfde netwerk en probeer het opnieuw.",
+            "cloud_error": "Fout bij het verbinden met de Tuya-cloud. Controleer uw configuratie.",
+            "cloud_unauthorized": "Niet geautoriseerd voor toegang tot de Tuya-cloud. Controleer uw configuratie: API-sleutel en API-geheim.",
+            "cloud_no_devices": "Geen Tuya-apparaten gevonden in de cloud. Controleer uw configuratie, zorg ervoor dat u het juiste account hebt gekoppeld en de juiste regio hebt geselecteerd.",
+            "unknown": "Onbekende fout, controleer de logbestanden."
+        },
+        "step": {
+            "method": {
+                "title": "LocalTuyaIR Afstandsbediening",
+                "description": "Deze integratie stelt u in staat uw Tuya universele afstandsbediening lokaal te gebruiken met Home Assistant, zonder de Tuya-cloud.\n\nOm toegang te krijgen tot uw Tuya afstandsbediening hebben we de lokale encryptiesleutel nodig. Deze stap kan lastig zijn, raadpleeg daarom de documentatie voor meer informatie.\n\nSelecteer de methode waarmee u uw Tuya afstandsbediening wilt configureren.",
+                "menu_options": {
+                    "cloud": "De lokale sleutel ophalen via de Tuya Cloud API",
+                    "ip_method": "De lokale sleutel handmatig invoeren"
+                }
+            },
+            "cloud": {
+                "title": "Tuya Cloud API",
+                "description": "Om de lokale sleutel op te halen, moeten we verbinding maken met de Tuya-cloud. Voer uw Tuya Cloud API Client ID en Client Secret in. Raadpleeg de documentatie voor meer informatie.",
+                "data": {
+                    "region": "Regio",
+                    "client_id": "Client ID",
+                    "client_secret": "Client Secret"
+                }
+            },
+            "ip_method": {
+                "title": "Hoe u het IP-adres van het apparaat kunt achterhalen",
+                "description": "Om het IP-adres van het apparaat te verkrijgen, kunt u uw lokale netwerk scannen of het handmatig invoeren.",
+                "menu_options": {
+                    "pre_scan": "Het lokale netwerk scannen (aanbevolen)",
+                    "ask_ip": "Het IP-adres handmatig invoeren",
+                    "config": "Het IP-adres handmatig invoeren"
+                }
+            },
+            "ask_ip": {
+                "title": "Voer het IP-adres van het apparaat in",
+                "description": "Voer het IP-adres van uw Tuya-afstandsbediening in en selecteer het bijbehorende apparaat uit de Tuya-cloud.",
+                "data": {
+                    "host": "IP-adres van het apparaat",
+                    "device_id": "Apparaatnaam"
+                }
+            },
+            "pre_scan": {
+                "title": "Netwerkscan",
+                "description": "Nu moeten we uw apparaat op het netwerk vinden. Dit kan tot 30 seconden duren."
+            },
+            "scan": {
+                "title": "Selecteer apparaat",
+                "description": "Selecteer het IP-adres van uw Tuya-afstandsbediening.",
+                "data": {
+                    "host": "IP-adres van het apparaat"
+                }
+            },
+            "config": {
+                "title": "Configureer uw Tuya-afstandsbediening",
+                "description": "Voer het IP-adres, de apparaat-ID en de lokale sleutel van uw Tuya-afstandsbediening in.",
+                "data": {
+                    "name": "Apparaatnaam",
+                    "host": "Host",
+                    "device_id": "Apparaat-ID",
+                    "local_key": "Lokale sleutel",
+                    "protocol_version": "Protocolversie (meestal 3.3 of 3.4)",
+                    "persistent_connection": "Permanente verbinding (sneller maar kan instabiel zijn)"
+                }
+            },
+            "reconfigure": {
+                "title": "Apparaatverbinding bijwerken",
+                "description": "Het IP-adres van het apparaat is mogelijk gewijzigd. Kies hoe u het wilt bijwerken.",
+                "menu_options": {
+                    "reconfigure_scan": "Het netwerk scannen naar het apparaat",
+                    "reconfigure_manual": "Een nieuw IP-adres handmatig invoeren"
+                }
+            },
+            "reconfigure_scan": {
+                "title": "Netwerkscan",
+                "description": "Er wordt op het netwerk naar het apparaat gezocht. Als het apparaat niet is gevonden, controleer dan of het online is en verbonden met hetzelfde netwerk, en klik vervolgens op Verzenden om opnieuw te proberen."
+            },
+            "reconfigure_manual": {
+                "title": "Nieuw IP-adres invoeren",
+                "description": "Voer het nieuwe IP-adres in voor het apparaat. De verbinding wordt getest voordat deze wordt opgeslagen.",
+                "data": {
+                    "host": "IP-adres van het apparaat"
+                }
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Afstandsbedieningsopties",
+                "description": "Wat wilt u doen?",
+                "menu_options": {
+                    "learn_command": "Een nieuw commando leren",
+                    "manage_commands": "Geleerde commando's beheren",
+                    "add_ac": "Airco toevoegen",
+                    "remove_ac": "Airco verwijderen",
+                    "settings": "Apparaatinstellingen"
+                }
+            },
+            "learn_command": {
+                "title": "Commando leren",
+                "description": "Voer de apparaatnaam, de commandonaam en het signaaltype in om het commando te leren.",
+                "data": {
+                    "device": "Apparaatnaam (bijv. tv, airco)",
+                    "command": "Commandonaam (bijv. power, vol_up)",
+                    "command_type": "Signaaltype"
+                }
+            },
+            "learn_wait": {
+                "title": "{type} commando leren",
+                "description": "Richt uw afstandsbediening op de IR/RF-ontvanger en druk op de knop die u wilt leren voor **{device}** → **{command}**.\n\nKlik vervolgens op **Verzenden** om het signaal vast te leggen."
+            },
+            "learn_done": {
+                "title": "Leerresultaat",
+                "description": "{result}"
+            },
+            "manage_commands": {
+                "title": "Commando's beheren",
+                "description": "Selecteer een commando om te verwijderen.",
+                "data": {
+                    "command_to_delete": "Commando om te verwijderen"
+                }
+            },
+            "manage_commands_empty": {
+                "title": "Commando's beheren",
+                "description": "Geen geleerde commando's gevonden. Gebruik 'Een nieuw commando leren' om er een toe te voegen."
+            },
+            "settings": {
+                "title": "Apparaatinstellingen",
+                "data": {
+                    "persistent_connection": "Permanente verbinding (sneller maar kan instabiel zijn)"
+                }
+            },
+            "add_ac": {
+                "title": "Airco toevoegen",
+                "description": "Voeg een vooraf geconfigureerde aircocontroller toe. De airco verschijnt als een klimaatentiteit met volledige bediening voor temperatuur, modus en ventilator.",
+                "data": {
+                    "ac_name": "Airco-naam (bijv. Woonkamer airco)",
+                    "ac_brand": "Aircomerk"
+                }
+            },
+            "remove_ac": {
+                "title": "Airco verwijderen",
+                "description": "Selecteer een aircocontroller om te verwijderen.",
+                "data": {
+                    "ac_to_remove": "Aircocontroller om te verwijderen"
+                }
+            }
+        },
+        "error": {
+            "learn_timeout": "Geen signaal ontvangen. Zorg ervoor dat u op de knop van de afstandsbediening hebt gedrukt terwijl het apparaat luisterde.",
+            "learn_error": "Er is een fout opgetreden bij het leren van het commando. Controleer de logbestanden voor details.",
+            "device_not_ready": "Het afstandsbedieningsapparaat is niet beschikbaar. Zorg ervoor dat het online is en probeer het opnieuw.",
+            "required": "Dit veld is verplicht."
+        }
+    }
+}
