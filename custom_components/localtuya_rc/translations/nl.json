@@ -28,10 +28,10 @@
             "message": "U moet ten minste één commando opgeven om te verwijderen."
         },
         "device_not_found": {
-            "message": "Apparaat '{device}' niet gevonden in de configuratie."
+            "message": "Apparaat {device} niet gevonden in de configuratie."
         },
         "command_not_found": {
-            "message": "Commando '{command}' voor apparaat '{device}' niet gevonden."
+            "message": "Commando {command} voor apparaat {device} niet gevonden."
         },
         "remote_entity_not_found": {
             "message": "Afstandsbedieningsentiteit niet gevonden voor apparaat {device_id}."

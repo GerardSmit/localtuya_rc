@@ -28,10 +28,10 @@
             "message": "You need to specify at least one command to delete."
         },
         "device_not_found": {
-            "message": "Device '{device}' not found in the codes storage."
+            "message": "Device {device} not found in the codes storage."
         },
         "command_not_found": {
-            "message": "Command '{command}' for device '{device}' not found."
+            "message": "Command {command} for device {device} not found."
         },
         "remote_entity_not_found": {
             "message": "Remote entity not found for device {device_id}."

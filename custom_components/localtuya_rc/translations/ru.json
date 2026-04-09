@@ -28,10 +28,10 @@
             "message": "Необходимо указать хотя бы одну команду для удаления."
         },
         "device_not_found": {
-            "message": "Устройство '{device}' не найдено в хранилище команд."
+            "message": "Устройство {device} не найдено в хранилище команд."
         },
         "command_not_found": {
-            "message": "Команда '{command}' для устройства '{device}' не найдена."
+            "message": "Команда {command} для устройства {device} не найдена."
         },
         "remote_entity_not_found": {
             "message": "Сущность пульта не найдена для устройства {device_id}."

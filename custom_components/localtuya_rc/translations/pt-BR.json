@@ -28,10 +28,10 @@
             "message": "Você precisa especificar pelo menos um comando para excluir."
         },
         "device_not_found": {
-            "message": "Dispositivo '{device}' não encontrado no armazenamento de comandos."
+            "message": "Dispositivo {device} não encontrado no armazenamento de comandos."
         },
         "command_not_found": {
-            "message": "Comando '{command}' para dispositivo '{device}' não encontrado."
+            "message": "Comando {command} para dispositivo {device} não encontrado."
         },
         "remote_entity_not_found": {
             "message": "Entidade de controle remoto não encontrada para dispositivo {device_id}."
