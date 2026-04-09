@@ -7,6 +7,9 @@ from homeassistant.components.climate import (
     HVACMode,
     SWING_ON,
     SWING_OFF,
+    PRESET_NONE,
+    PRESET_BOOST,
+    PRESET_ECO,
 )
 from homeassistant.const import (
     CONF_DEVICE_ID,
@@ -75,10 +78,15 @@ class ACClimate(ClimateEntity, RestoreEntity):
         features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.FAN_MODE
+            | ClimateEntityFeature.TURN_ON
+            | ClimateEntityFeature.TURN_OFF
         )
         if protocol.has_swing:
             features |= ClimateEntityFeature.SWING_MODE
             self._attr_swing_modes = SWING_MODES
+        if protocol.preset_modes:
+            features |= ClimateEntityFeature.PRESET_MODE
+            self._attr_preset_modes = [PRESET_NONE] + protocol.preset_modes
         self._attr_supported_features = features
 
         # Optimistic state defaults
@@ -86,7 +94,8 @@ class ACClimate(ClimateEntity, RestoreEntity):
         self._attr_target_temperature = 23
         self._attr_fan_mode = protocol.fan_modes[0] if protocol.fan_modes else "auto"
         self._attr_swing_mode = SWING_OFF
-        self._swing_state = False
+        self._attr_preset_mode = PRESET_NONE
+        self._last_active_mode = HVACMode.AUTO
 
     @property
     def device_info(self):
@@ -114,6 +123,8 @@ class ACClimate(ClimateEntity, RestoreEntity):
 
         if last_state.state in [m.value for m in self._attr_hvac_modes]:
             self._attr_hvac_mode = HVACMode(last_state.state)
+            if self._attr_hvac_mode != HVACMode.OFF:
+                self._last_active_mode = self._attr_hvac_mode
 
         attrs = last_state.attributes
         if "temperature" in attrs and attrs["temperature"] is not None:
@@ -122,7 +133,9 @@ class ACClimate(ClimateEntity, RestoreEntity):
             self._attr_fan_mode = attrs["fan_mode"]
         if "swing_mode" in attrs:
             self._attr_swing_mode = attrs["swing_mode"]
-            self._swing_state = attrs["swing_mode"] == SWING_ON
+        if "preset_mode" in attrs and hasattr(self, "_attr_preset_modes"):
+            if attrs["preset_mode"] in self._attr_preset_modes:
+                self._attr_preset_mode = attrs["preset_mode"]
 
         # Write state immediately so the entity is available right after setup
         self.async_write_ha_state()
@@ -151,10 +164,14 @@ class ACClimate(ClimateEntity, RestoreEntity):
 
     async def _send_state(self):
         """Encode and send the current optimistic state as an IR command."""
+        preset = None
+        if hasattr(self, "_attr_preset_mode") and self._attr_preset_mode != PRESET_NONE:
+            preset = self._attr_preset_mode
         pulses = self._protocol.encode_state(
             mode=self._attr_hvac_mode,
             temp=int(self._attr_target_temperature),
             fan=self._attr_fan_mode,
+            preset=preset,
         )
         await self._send_pulses(pulses)
 
@@ -166,6 +183,8 @@ class ACClimate(ClimateEntity, RestoreEntity):
         except Exception:
             self._attr_hvac_mode = prev_mode
             raise
+        if hvac_mode != HVACMode.OFF:
+            self._last_active_mode = hvac_mode
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs):
@@ -199,9 +218,28 @@ class ACClimate(ClimateEntity, RestoreEntity):
         self.async_write_ha_state()
 
     async def async_set_swing_mode(self, swing_mode: str):
-        desired = swing_mode == SWING_ON
-        if desired != self._swing_state:
-            await self._send_pulses(self._protocol.encode_swing())
-            self._swing_state = desired
+        await self._send_pulses(self._protocol.encode_swing(swing_mode == SWING_ON))
         self._attr_swing_mode = swing_mode
         self.async_write_ha_state()
+
+    async def async_set_preset_mode(self, preset_mode: str):
+        prev_preset = self._attr_preset_mode
+        prev_mode = self._attr_hvac_mode
+        self._attr_preset_mode = preset_mode
+        if self._attr_hvac_mode == HVACMode.OFF:
+            self._attr_hvac_mode = HVACMode.AUTO
+        try:
+            await self._send_state()
+        except Exception:
+            self._attr_preset_mode = prev_preset
+            self._attr_hvac_mode = prev_mode
+            raise
+        self.async_write_ha_state()
+
+    async def async_turn_on(self):
+        """Turn on using the last active HVAC mode."""
+        await self.async_set_hvac_mode(self._last_active_mode)
+
+    async def async_turn_off(self):
+        """Turn off the AC."""
+        await self.async_set_hvac_mode(HVACMode.OFF)

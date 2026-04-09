@@ -30,18 +30,25 @@ class ACProtocol(ABC):
 
     @property
     def has_swing(self) -> bool:
-        """Whether this protocol supports swing toggle."""
+        """Whether this protocol supports swing control."""
         return False
 
+    @property
+    def preset_modes(self) -> list[str]:
+        """Supported preset mode names (e.g., 'boost', 'eco')."""
+        return []
+
     @abstractmethod
-    def encode_state(self, mode: HVACMode, temp: int, fan: str) -> list[int]:
+    def encode_state(
+        self, mode: HVACMode, temp: int, fan: str, preset: str | None = None
+    ) -> list[int]:
         """Encode the full AC state to IR pulse timings.
 
         When mode is HVACMode.OFF, encodes a power-off command.
         """
 
-    def encode_swing(self) -> list[int]:
-        """Encode a swing toggle command. Override if has_swing is True."""
+    def encode_swing(self, on: bool) -> list[int]:
+        """Encode a swing on/off command. Override if has_swing is True."""
         raise NotImplementedError
 
 
